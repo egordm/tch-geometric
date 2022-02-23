@@ -438,8 +438,11 @@ dependencies = [
 name = "tch-geometric"
 version = "0.1.0"
 dependencies = [
+ "num-traits",
  "pyo3",
+ "rand",
  "tch",
+ "thiserror",
 ]
 
 [[package]]

@@ -9,5 +9,14 @@ name = "tch_geometric"
 crate-type = ["cdylib"]
 
 [dependencies]
+thiserror = "1.0"
+num-traits = "0.2.14"
+rand = { version = "0.8.5", features = ["small_rng"], default-features = false }
 pyo3 = { version = "0.15.1", features = ["extension-module"] }
 tch = { git = "https://github.com/EgorDm/tch-rs.git", features = ["torch_python"], default-features = false }
+
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"

@@ -3,3 +3,5 @@ LIBTORCH = "/data/pella/projects/University/Thesis/Thesis/code/env/lib/python3.9
 LIBTORCH_CXX11_ABI = "0"
 PYTHON_INCLUDE_DIRS = "/data/pella/projects/University/Thesis/Thesis/code/env/include/python3.9"
 LD_LIBRARY_PATH = "${LIBTORCH}/lib:$LD_LIBRARY_PATH"
+
+RUSTFLAGS = "-C target-cpu=native"
