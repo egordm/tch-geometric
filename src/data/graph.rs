@@ -1,31 +1,29 @@
-use std::convert::TryFrom;
 use std::ops::Range;
-use tch::kind::Element;
-use crate::{TensorConversionError, try_tensor_to_slice};
 use crate::utils::types::{DefaultIx, DefaultPtr, IndexType, NodeIdx, NodePtr};
 
+#[derive(Debug, Clone, Copy)]
 pub enum SparseGraphType {
-    CSR,
-    CSC,
+    Csr,
+    Csc,
 }
 
 pub trait SparseGraphTypeTrait {
     fn get_type() -> SparseGraphType;
 }
 
-pub struct CSR;
+pub struct Csr;
 
-impl SparseGraphTypeTrait for CSR {
+impl SparseGraphTypeTrait for Csr {
     fn get_type() -> SparseGraphType {
-        SparseGraphType::CSR
+        SparseGraphType::Csr
     }
 }
 
-pub struct CSC;
+pub struct Csc;
 
-impl SparseGraphTypeTrait for CSC {
+impl SparseGraphTypeTrait for Csc {
     fn get_type() -> SparseGraphType {
-        SparseGraphType::CSC
+        SparseGraphType::Csc
     }
 }
 
@@ -36,8 +34,8 @@ pub struct SparseGraph<'a, Ty, Ptr = DefaultPtr, Ix = DefaultIx> {
     pub _phantom: std::marker::PhantomData<Ty>,
 }
 
-pub type CsrGraph<'a, Ptr = DefaultPtr, Ix = DefaultIx> = SparseGraph<'a, CSR, Ptr, Ix>;
-pub type CscGraph<'a, Ptr = DefaultPtr, Ix = DefaultIx> = SparseGraph<'a, CSC, Ptr, Ix>;
+pub type CsrGraph<'a, Ptr = DefaultPtr, Ix = DefaultIx> = SparseGraph<'a, Csr, Ptr, Ix>;
+pub type CscGraph<'a, Ptr = DefaultPtr, Ix = DefaultIx> = SparseGraph<'a, Csc, Ptr, Ix>;
 
 impl<'a, Ty, Ptr: IndexType, Ix: IndexType> SparseGraph<'a, Ty, Ptr, Ix> {
     pub fn new(ptrs: &'a [NodePtr<Ptr>], indices: &'a [NodeIdx<Ix>]) -> Self {

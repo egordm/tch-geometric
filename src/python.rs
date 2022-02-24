@@ -4,7 +4,7 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use rand::{Rng, SeedableRng};
 use tch::{Kind, Tensor};
-use crate::SparseGraph;
+use crate::data::graph::CsrGraph;
 use crate::utils::sampling::{ReplacementSampling, Sampling};
 use crate::utils::tensor::{TensorConversionError, try_tensor_to_slice};
 
@@ -14,9 +14,9 @@ fn sum_as_string(a: Tensor, b: Tensor) -> PyResult<Tensor> {
     Ok(a + &b)
 }
 
-type NodeType = String;
-type RelType = String;
-type EdgeType = (NodeType, RelType, NodeType);
+// type NodeType = String;
+// type RelType = String;
+// type EdgeType = (NodeType, RelType, NodeType);
 
 type NodeIdx = i64;
 type OutputNodeIdx = i64;
@@ -52,10 +52,7 @@ fn sample_own<
     let row_data = try_tensor_to_slice::<i64>(&t_row_data)
         .map_err(<TensorConversionError as Into<PyErr>>::into)?;
 
-    let graph = SparseGraph {
-        ptrs: colptr_data,
-        indices: row_data
-    };
+    let graph = CsrGraph::new(colptr_data, row_data);
 
     let input_node_data = try_tensor_to_slice::<i64>(&input_node)
         .map_err(<TensorConversionError as Into<PyErr>>::into)?;
@@ -134,7 +131,7 @@ fn sample_own<
             let neighbors = graph.neighbors_slice(*w);
 
             for (v, offset) in neighbors.iter().zip(neighbors_range) {
-                let res = to_local_node.get(&v); // find neighbor in output list
+                let res = to_local_node.get(v); // find neighbor in output list
                 if let Some(res) = res.cloned() {
                     // if neighbor is in output list
                     cols.push(i as NodeIdx); // add sample to row
@@ -145,12 +142,12 @@ fn sample_own<
         }
     }
 
-    return Ok((
+    Ok((
         samples.try_into().expect("Cant convert vec into tensor"),
         rows.try_into().expect("Cant convert vec into tensor"),
         cols.try_into().expect("Cant convert vec into tensor"),
         edges.try_into().expect("Cant convert vec into tensor"),
-    ));
+    ))
 }
 
 #[cfg(feature = "extension-module")]
@@ -261,7 +258,7 @@ fn sample(
             } else if replace {
                 // sample neighbors with replacement
 
-                for j in 0..num_samples {
+                for _ in 0..num_samples {
                     let offset = col_start + rng.gen_range(0..col_count); // random neighbor offset in matrix
                     let v = row_data[offset as usize]; // neighbor node id
                     let res = to_local_node.insert(v, samples.len() as OutputNodeIdx); // register node in output list
@@ -331,13 +328,12 @@ fn sample(
         }
     }
 
-
-    return Ok((
+    Ok((
         samples.try_into().expect("Cant convert vec into tensor"),
         rows.try_into().expect("Cant convert vec into tensor"),
         cols.try_into().expect("Cant convert vec into tensor"),
         edges.try_into().expect("Cant convert vec into tensor"),
-    ));
+    ))
 }
 
 

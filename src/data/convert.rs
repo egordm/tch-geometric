@@ -3,8 +3,7 @@ use std::ops::Add;
 use rayon::prelude::*;
 use tch::{Device, IndexOp, Tensor};
 use tch::kind::Element;
-use crate::data::graph::{CSC, CSR, SparseGraphType, SparseGraphTypeTrait};
-use crate::SparseGraph;
+use crate::data::graph::{Csc, Csr, SparseGraph, SparseGraphType, SparseGraphTypeTrait};
 use crate::utils::tensor::{check_device, TensorResult, TensorConversionError, try_tensor_to_slice_mut, try_tensor_to_slice, tensor_to_slice_mut};
 use crate::utils::types::IndexType;
 
@@ -15,8 +14,8 @@ pub fn ind2ptr(
     check_device!(ind, Device::Cpu);
 
     let mut out = Tensor::empty(&[m + 1], (ind.kind(), ind.device()));
-    let ind_data = try_tensor_to_slice::<i64>(&ind)?;
-    let mut out_data = try_tensor_to_slice_mut::<i64>(&mut out)?;
+    let ind_data = try_tensor_to_slice::<i64>(ind)?;
+    let out_data = try_tensor_to_slice_mut::<i64>(&mut out)?;
 
     let numel = ind.numel();
     if numel == 0 {
@@ -51,8 +50,8 @@ pub struct SparseGraphData<Ty> {
     _phantom: std::marker::PhantomData<Ty>,
 }
 
-pub type CscGraphData = SparseGraphData<CSC>;
-pub type CsrGraphData = SparseGraphData<CSR>;
+pub type CscGraphData = SparseGraphData<Csc>;
+pub type CsrGraphData = SparseGraphData<Csr>;
 
 impl<Ty> SparseGraphData<Ty> {
     pub fn new(
@@ -78,14 +77,14 @@ impl<Ty: SparseGraphTypeTrait> SparseGraphData<Ty> {
         let col = edge_index.select(0, 1);
 
         match Ty::get_type() {
-            SparseGraphType::CSR => {
+            SparseGraphType::Csr => {
                 let perm = (&row * node_count).add(&col).argsort(0, false);
                 let row_ptrs = ind2ptr(&row.i(&perm), node_count)?;
                 let col_indices = col.i(&perm);
 
                 Ok(Self::new(row_ptrs, col_indices, perm))
             }
-            SparseGraphType::CSC => {
+            SparseGraphType::Csc => {
                 let perm = (&col * node_count).add(&row).argsort(0, false);
                 let col_ptrs = ind2ptr(&col.i(&perm), node_count)?;
                 let row_indices = row.i(&perm);
@@ -153,7 +152,7 @@ pub fn csc_edge_cumsum<T: Element + Add<Output=T> + Copy>(
             }
 
             let mut row_slice = row_data.slice(0, *col_start, *col_end, 1);
-            let mut row_data = tensor_to_slice_mut::<T>(&mut row_slice);
+            let row_data = tensor_to_slice_mut::<T>(&mut row_slice);
             let mut acc = row_data[0];
             for i in 1..row_data.len() {
                 acc = acc + row_data[i];

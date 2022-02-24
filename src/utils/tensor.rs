@@ -1,5 +1,3 @@
-use std::ops::{Add, Range, Sub};
-use pyo3::exceptions::PyValueError;
 use pyo3::{PyErr};
 use thiserror::Error;
 use tch::kind::Element;
@@ -15,9 +13,9 @@ pub enum TensorConversionError {
     InvalidShape(Option<String>),
 }
 
-impl Into<PyErr> for TensorConversionError {
-    fn into(self) -> PyErr {
-        PyValueError::new_err(format!("{}", &self))
+impl From<TensorConversionError> for PyErr {
+    fn from(error: TensorConversionError) -> Self {
+        error.into()
     }
 }
 
