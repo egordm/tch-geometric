@@ -1,9 +1,10 @@
 use std::fmt;
 use std::hash::Hash;
 
+pub type DefaultPtr = i64;
 pub type DefaultIx = i64;
 pub type NodeIdx<Ix = DefaultIx> = Ix;
-pub type NodeOffset<Ix = DefaultIx> = Ix;
+pub type NodePtr<Ix = DefaultIx> = Ix;
 pub type EdgeIdx<Ix = DefaultIx> = Ix;
 
 pub unsafe trait IndexType: Copy + Default + Hash + Ord + fmt::Debug + 'static {

@@ -1,8 +1,12 @@
+use std::convert::TryInto;
 use std::ops::Add;
 use rayon::prelude::*;
 use tch::{Device, IndexOp, Tensor};
 use tch::kind::Element;
+use crate::data::graph::{CSC, CSR, SparseGraphType, SparseGraphTypeTrait};
+use crate::SparseGraph;
 use crate::utils::tensor::{check_device, TensorResult, TensorConversionError, try_tensor_to_slice_mut, try_tensor_to_slice, tensor_to_slice_mut};
+use crate::utils::types::IndexType;
 
 pub fn ind2ptr(
     ind: &Tensor,
@@ -40,27 +44,69 @@ pub fn ind2ptr(
     Ok(out)
 }
 
-pub struct CscData {
-    pub col_ptrs: Tensor,
-    pub row_data: Tensor,
+pub struct SparseGraphData<Ty> {
+    pub ptrs: Tensor,
+    pub indices: Tensor,
     pub perm: Tensor,
+    _phantom: std::marker::PhantomData<Ty>,
 }
 
-pub fn to_csc(
-    edge_index: &Tensor,
-    node_count: i64,
-) -> TensorResult<CscData> {
-    let row = edge_index.select(0, 0);
-    let col = edge_index.select(0, 1);
+pub type CscGraphData = SparseGraphData<CSC>;
+pub type CsrGraphData = SparseGraphData<CSR>;
 
-    let perm = (&col * node_count).add(&row).argsort(0, false);
-    let col_ptrs = ind2ptr(&col.i(&perm), node_count)?;
+impl<Ty> SparseGraphData<Ty> {
+    pub fn new(
+        ptrs: Tensor,
+        indices: Tensor,
+        perm: Tensor,
+    ) -> SparseGraphData<Ty> {
+        SparseGraphData {
+            ptrs,
+            indices,
+            perm,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
 
-    Ok(CscData {
-        col_ptrs,
-        row_data: row.i(&perm),
-        perm,
-    })
+impl<Ty: SparseGraphTypeTrait> SparseGraphData<Ty> {
+    pub fn try_from_edge_index(
+        edge_index: &Tensor,
+        node_count: i64,
+    ) -> TensorResult<Self> {
+        let row = edge_index.select(0, 0);
+        let col = edge_index.select(0, 1);
+
+        match Ty::get_type() {
+            SparseGraphType::CSR => {
+                let perm = (&row * node_count).add(&col).argsort(0, false);
+                let row_ptrs = ind2ptr(&row.i(&perm), node_count)?;
+                let col_indices = col.i(&perm);
+
+                Ok(Self::new(row_ptrs, col_indices, perm))
+            }
+            SparseGraphType::CSC => {
+                let perm = (&col * node_count).add(&row).argsort(0, false);
+                let col_ptrs = ind2ptr(&col.i(&perm), node_count)?;
+                let row_indices = row.i(&perm);
+
+                Ok(Self::new(col_ptrs, row_indices, perm))
+            }
+        }
+    }
+}
+
+impl<
+    'a, Ty, Ptr: Element + IndexType, Ix: Element + IndexType
+> TryInto<SparseGraph<'a, Ty, Ptr, Ix>> for &'a SparseGraphData<Ty> {
+    type Error = TensorConversionError;
+
+    fn try_into(self) -> Result<SparseGraph<'a, Ty, Ptr, Ix>, Self::Error> {
+        let ptrs = try_tensor_to_slice(&self.ptrs)?;
+        let indices = try_tensor_to_slice(&self.indices)?;
+
+        Ok(SparseGraph::new(ptrs, indices))
+    }
 }
 
 pub fn csc_sort_edges(
@@ -120,11 +166,11 @@ pub fn csc_edge_cumsum<T: Element + Add<Output=T> + Copy>(
 
 #[cfg(test)]
 mod tests {
-    use std::convert::{TryFrom};
+    use std::convert::{TryFrom, TryInto};
     use ndarray::{arr2, Array2};
     use tch::Tensor;
-    use crate::CscGraph;
-    use crate::data::convert::{csc_edge_cumsum, csc_sort_edges, ind2ptr, to_csc};
+    use crate::data::convert::{csc_edge_cumsum, csc_sort_edges, CscGraphData, ind2ptr};
+    use crate::data::graph::CscGraph;
 
     #[test]
     fn test_ind2ptr() {
@@ -148,8 +194,9 @@ mod tests {
         ]);
         let edge_index = Tensor::try_from(edge_index_data).unwrap();
 
-        let result = to_csc(&edge_index, m).unwrap();
-        let graph: CscGraph<i64, i64> = CscGraph::try_from(&result).unwrap();
+
+        let result = CscGraphData::try_from_edge_index(&edge_index, m).unwrap();
+        let graph: CscGraph<i64, i64> = (&result).try_into().unwrap();
 
         assert_eq!(graph.in_degree(0), 3);
         assert_eq!(graph.in_degree(1), 2);

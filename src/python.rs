@@ -4,7 +4,7 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use rand::{Rng, SeedableRng};
 use tch::{Kind, Tensor};
-use crate::CscGraph;
+use crate::SparseGraph;
 use crate::utils::sampling::{ReplacementSampling, Sampling};
 use crate::utils::tensor::{TensorConversionError, try_tensor_to_slice};
 
@@ -52,9 +52,9 @@ fn sample_own<
     let row_data = try_tensor_to_slice::<i64>(&t_row_data)
         .map_err(<TensorConversionError as Into<PyErr>>::into)?;
 
-    let graph = CscGraph {
-        col_ptrs: colptr_data,
-        row_data: row_data
+    let graph = SparseGraph {
+        ptrs: colptr_data,
+        indices: row_data
     };
 
     let input_node_data = try_tensor_to_slice::<i64>(&input_node)
@@ -107,7 +107,7 @@ fn sample_own<
                     neighbors_range.sample(&mut rng, &mut tmp_sample);
                 }
 
-                for (v, offset) in tmp_sample.iter().cloned().map(|o| (graph.row_data[o], o)) {
+                for (v, offset) in tmp_sample.iter().cloned().map(|o| (graph.indices[o], o)) {
                     let res = to_local_node.insert(v, samples.len() as OutputNodeIdx); // register node in output list
 
                     samples.push(v); // add neighbor to output list
