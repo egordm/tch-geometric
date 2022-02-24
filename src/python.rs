@@ -4,6 +4,8 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use rand::{Rng, SeedableRng};
 use tch::{Kind, Tensor};
+use crate::algo::neighbor_sampling::neighbor_sampling_homogenous;
+use crate::data::convert::CsrGraphData;
 use crate::data::graph::CsrGraph;
 use crate::utils::sampling::{ReplacementSampling, Sampling};
 use crate::utils::tensor::{TensorConversionError, try_tensor_to_slice};
@@ -23,133 +25,6 @@ type OutputNodeIdx = i64;
 type EdgeIdx = i64;
 
 
-fn sample_own<
-    const REPLACE: bool,
-    const DIRECTED: bool,
->(
-    t_col_ptrs: Tensor,
-    t_row_data: Tensor,
-    input_node: Tensor,
-    num_neighbors: Vec<i64>,
-) -> PyResult<(
-    Tensor,
-    Tensor,
-    Tensor,
-    Tensor,
-)> {
-    let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
-
-    let aa = Tensor::read_npy("colptr.npy").unwrap();
-    println!("{:?}", aa);
-
-    // Initialize some data structures for the sampling process:
-    let mut samples: Vec<NodeIdx> = Vec::new();
-    let mut to_local_node: HashMap<NodeIdx, OutputNodeIdx> = HashMap::new();
-
-
-    let colptr_data = try_tensor_to_slice::<i64>(&t_col_ptrs)
-        .map_err(<TensorConversionError as Into<PyErr>>::into)?;
-    let row_data = try_tensor_to_slice::<i64>(&t_row_data)
-        .map_err(<TensorConversionError as Into<PyErr>>::into)?;
-
-    let graph = CsrGraph::new(colptr_data, row_data);
-
-    let input_node_data = try_tensor_to_slice::<i64>(&input_node)
-        .map_err(<TensorConversionError as Into<PyErr>>::into)?;
-
-
-    for i in 0..input_node_data.len() {
-        let v = input_node_data[i];
-        samples.push(v);
-        to_local_node.insert(v, i as OutputNodeIdx);
-    }
-
-    let (mut rows, mut cols, mut edges) = (Vec::<NodeIdx>::new(), Vec::<NodeIdx>::new(), Vec::<NodeIdx>::new());
-
-    let (mut begin, mut end) = (0, samples.len());
-    for num_samples in num_neighbors {
-        let mut tmp_sample = vec![0; num_samples as usize];
-
-        for i in begin..end {
-            let w = samples[i];
-            let neighbors_range = graph.neighbors_range(w);
-            let neighbors = graph.neighbors_slice(w);
-
-            if neighbors.len() == 0 {
-                continue
-            }
-
-            if (num_samples < 0) || (!REPLACE && (num_samples > neighbors.len() as i64)) {
-                // If num_samples is negative,
-                // or if we are not replacing and num_samples is greater than the number of edges,
-                // then we sample all the edges
-
-                for (v, offset) in neighbors.iter().cloned().zip(neighbors_range.into_iter()) {
-                    // register node in output list
-                    let res = to_local_node.insert(v, samples.len() as OutputNodeIdx);
-
-                    samples.push(v); // add neighbor to output list
-                    if DIRECTED {
-                        // if directed, add edge to output graph (because it matters)
-                        cols.push(i as NodeIdx);
-                        rows.push(res.unwrap());
-                        edges.push(offset as NodeIdx);
-                    }
-                }
-            } else {
-                // Randomly sample num_samples nodes from the neighbors of w
-                if REPLACE {
-                    neighbors_range.replacement_sample(&mut rng, &mut tmp_sample);
-                } else {
-                    neighbors_range.sample(&mut rng, &mut tmp_sample);
-                }
-
-                for (v, offset) in tmp_sample.iter().cloned().map(|o| (graph.indices[o], o)) {
-                    let res = to_local_node.insert(v, samples.len() as OutputNodeIdx); // register node in output list
-
-                    samples.push(v); // add neighbor to output list
-                    if DIRECTED {
-                        // if directed, add edge to output graph (because it matters)
-                        cols.push(i as NodeIdx);
-                        rows.push(res.unwrap());
-                        edges.push(offset as NodeIdx);
-                    }
-                }
-            }
-        }
-        // set begin to the old end to avoid sampling same nodes twice. and repeat
-        begin = end;
-        end = samples.len();
-    }
-
-    if !DIRECTED {
-        // if undirected, we need to add edges in both directions
-        for (i, w) in samples.iter().enumerate() {
-            // for each sample
-            let neighbors_range = graph.neighbors_range(*w);
-            let neighbors_range = neighbors_range.start as NodeIdx..neighbors_range.end as NodeIdx;
-            let neighbors = graph.neighbors_slice(*w);
-
-            for (v, offset) in neighbors.iter().zip(neighbors_range) {
-                let res = to_local_node.get(v); // find neighbor in output list
-                if let Some(res) = res.cloned() {
-                    // if neighbor is in output list
-                    cols.push(i as NodeIdx); // add sample to row
-                    rows.push(res); // add edge to output graph
-                    edges.push(offset);
-                }
-            }
-        }
-    }
-
-    Ok((
-        samples.try_into().expect("Cant convert vec into tensor"),
-        rows.try_into().expect("Cant convert vec into tensor"),
-        cols.try_into().expect("Cant convert vec into tensor"),
-        edges.try_into().expect("Cant convert vec into tensor"),
-    ))
-}
-
 #[cfg(feature = "extension-module")]
 #[pyfunction]
 fn sample_own_custom(
@@ -165,12 +40,16 @@ fn sample_own_custom(
     Tensor,
     Tensor,
 )> {
-    match (replace, directed) {
-        (true, true) => sample_own::<true, true>(colptr, row, input_node, num_neighbors),
-        (true, false) => sample_own::<true, false>(colptr, row, input_node, num_neighbors),
-        (false, true) => sample_own::<false, true>(colptr, row, input_node, num_neighbors),
-        (false, false) => sample_own::<false, false>(colptr, row, input_node, num_neighbors),
-    }
+    let ptrs = try_tensor_to_slice(&colptr)?;
+    let indices = try_tensor_to_slice(&row)?;
+    let graph = CsrGraph::new(ptrs, indices);
+
+    Ok(match (replace, directed) {
+        (true, true) => neighbor_sampling_homogenous::<true, true>(&graph, input_node, num_neighbors),
+        (true, false) => neighbor_sampling_homogenous::<true, false>(&graph, input_node, num_neighbors),
+        (false, true) => neighbor_sampling_homogenous::<false, true>(&graph, input_node, num_neighbors),
+        (false, false) => neighbor_sampling_homogenous::<false, false>(&graph, input_node, num_neighbors),
+    }?)
 }
 
 #[cfg(feature = "extension-module")]

@@ -40,6 +40,7 @@ pub fn node2vec(
         for l in 0..walk_length as usize {
             let neighbors = graph.neighbors_slice(cur);
 
+            // TODO: move this logic to a walker state function
             // Neighbor sampling
             let mut next;
             loop {
