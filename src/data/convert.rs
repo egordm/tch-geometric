@@ -1,4 +1,5 @@
 use std::ops::Add;
+use rayon::prelude::*;
 use tch::{Device, IndexOp, Tensor};
 use crate::utils::tensor::{check_device, TensorResult, TensorConversionError, try_tensor_to_slice_mut, try_tensor_to_slice};
 
@@ -61,13 +62,42 @@ pub fn to_csc(
     })
 }
 
+pub fn csc_sort_edges(
+    col_ptrs: &Tensor,
+    perm: &Tensor,
+    row_weights: &Tensor,
+    descending: bool,
+) -> TensorResult<Tensor> {
+    check_device!(col_ptrs, Device::Cpu);
+
+    let new_perm = perm.copy();
+    let col_ptrs_data = try_tensor_to_slice::<i64>(&col_ptrs)?;
+
+    // TODO: benchmark this implementation. Check if it's faster than serial or native rust one
+    col_ptrs_data.par_iter()
+        .zip(col_ptrs_data.par_iter().skip(1))
+        .for_each(|(col_start, col_end)| {
+            if col_end - col_start <= 1 {
+                return;
+            }
+
+            let sorted_idx = row_weights
+                .slice(0, *col_start, *col_end, 1)
+                .argsort(0, descending) + *col_start;
+            let slice_perm = perm.i(&sorted_idx);
+            new_perm.slice(0, *col_start, *col_end, 1).copy_(&slice_perm)
+        });
+
+    Ok(new_perm)
+}
+
 #[cfg(test)]
 mod tests {
     use std::convert::{TryFrom};
     use ndarray::{arr2, Array2};
     use tch::Tensor;
     use crate::CscGraph;
-    use crate::data::convert::{ind2ptr, to_csc};
+    use crate::data::convert::{csc_sort_edges, ind2ptr, to_csc};
 
     #[test]
     fn test_ind2ptr() {
@@ -100,5 +130,21 @@ mod tests {
         assert_eq!(graph.in_degree(2), 2);
         assert_eq!(graph.neighbors_slice(0), [1, 2, 3]);
         assert_eq!(graph.neighbors_slice(1), [4, 5]);
+    }
+
+    #[test]
+    fn test_csc_sort_edges() {
+        let col_ptrs_data: Vec<i64>    = vec![0, 0, 0, 0, 3, 5, 5, 5, 7, 9];
+        let perm_data: Vec<i64>        = vec![0, 1, 2, 3, 4, 5, 6, 7];
+        let row_weights_data: Vec<f64> = vec![9.0, 5.0, 8.0, 9.0, 10.0, 11.0, 1.0, 1.5];
+
+        let col_ptrs = Tensor::of_slice(&col_ptrs_data);
+        let perm = Tensor::of_slice(&perm_data);
+        let row_weights = Tensor::of_slice(&row_weights_data);
+
+        let result = csc_sort_edges(&col_ptrs, &perm, &row_weights, false).unwrap();
+        let result_data: Vec<i64> = result.into();
+
+        assert_eq!(result_data, vec![1, 2, 0, 3, 4, 6, 5, 7]);
     }
 }
