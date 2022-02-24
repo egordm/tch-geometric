@@ -46,22 +46,20 @@ pub fn try_tensor_to_slice<T: Element>(tensor: &Tensor) -> Result<&[T], TensorCo
     check_device!(tensor, Device::Cpu);
     check_kind!(tensor, T::KIND);
 
-    let length = tensor.size().into_iter()
-        .reduce(|acc, x| acc * x)
-        .ok_or(TensorConversionError::InvalidShape(None))?;
-    Ok(
-        unsafe { std::slice::from_raw_parts(tensor.data_ptr() as *const T, length as usize) }
-    )
+    Ok(tensor_to_slice(tensor))
+}
+
+pub fn tensor_to_slice<T: Element>(tensor: &Tensor) -> &[T] {
+    unsafe { std::slice::from_raw_parts(tensor.data_ptr() as *const T, tensor.numel()) }
 }
 
 pub fn try_tensor_to_slice_mut<T: Element>(tensor: &mut Tensor) -> Result<&mut [T], TensorConversionError> {
     check_device!(tensor, Device::Cpu);
     check_kind!(tensor, T::KIND);
 
-    let length = tensor.size().into_iter()
-        .reduce(|acc, x| acc * x)
-        .ok_or(TensorConversionError::InvalidShape(None))?;
-    Ok(
-        unsafe { std::slice::from_raw_parts_mut(tensor.data_ptr() as *mut T, length as usize) }
-    )
+    Ok(tensor_to_slice_mut(tensor))
+}
+
+pub fn tensor_to_slice_mut<T: Element>(tensor: &mut Tensor) -> &mut [T] {
+    unsafe { std::slice::from_raw_parts_mut(tensor.data_ptr() as *mut T, tensor.numel()) }
 }
