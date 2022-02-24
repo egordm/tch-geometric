@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use std::convert::{TryFrom};
 use std::ops::Add;
 use rayon::prelude::*;
 use tch::{Device, IndexOp, Tensor};
@@ -97,12 +97,12 @@ impl<Ty: SparseGraphTypeTrait> SparseGraphData<Ty> {
 
 impl<
     'a, Ty, Ptr: Element + IndexType, Ix: Element + IndexType
-> TryInto<SparseGraph<'a, Ty, Ptr, Ix>> for &'a SparseGraphData<Ty> {
+> TryFrom<&'a SparseGraphData<Ty>> for SparseGraph<'a, Ty, Ptr, Ix> {
     type Error = TensorConversionError;
 
-    fn try_into(self) -> Result<SparseGraph<'a, Ty, Ptr, Ix>, Self::Error> {
-        let ptrs = try_tensor_to_slice(&self.ptrs)?;
-        let indices = try_tensor_to_slice(&self.indices)?;
+    fn try_from(value: &'a SparseGraphData<Ty>) -> Result<Self, Self::Error> {
+        let ptrs = try_tensor_to_slice(&value.ptrs)?;
+        let indices = try_tensor_to_slice(&value.indices)?;
 
         Ok(SparseGraph::new(ptrs, indices))
     }
@@ -117,7 +117,7 @@ pub fn csc_sort_edges(
     check_device!(col_ptrs, Device::Cpu);
 
     let new_perm = perm.copy();
-    let col_ptrs_data = try_tensor_to_slice::<i64>(&col_ptrs)?;
+    let col_ptrs_data = try_tensor_to_slice::<i64>(col_ptrs)?;
 
     // TODO: benchmark this implementation. Check if it's runtime is very different than serial or native rust one
     col_ptrs_data.par_iter()
@@ -137,13 +137,13 @@ pub fn csc_sort_edges(
     Ok(new_perm)
 }
 
-pub fn csc_edge_cumsum<T: Element + Add<Output=T> + Copy>(
+pub fn csc_edge_cumsum<T: Element + Add<Output=T> + Default + Copy>(
     col_ptrs: &Tensor,
     row_data: &mut Tensor,
 ) -> TensorResult<()> {
     check_device!(col_ptrs, Device::Cpu);
 
-    let col_ptrs_data = try_tensor_to_slice::<i64>(&col_ptrs)?;
+    let col_ptrs_data = try_tensor_to_slice::<i64>(col_ptrs)?;
     col_ptrs_data.par_iter()
         .zip(col_ptrs_data.par_iter().skip(1))
         .for_each(|(col_start, col_end)| {
@@ -153,10 +153,10 @@ pub fn csc_edge_cumsum<T: Element + Add<Output=T> + Copy>(
 
             let mut row_slice = row_data.slice(0, *col_start, *col_end, 1);
             let row_data = tensor_to_slice_mut::<T>(&mut row_slice);
-            let mut acc = row_data[0];
-            for i in 1..row_data.len() {
-                acc = acc + row_data[i];
-                row_data[i] = acc;
+            let mut acc = T::default();
+            for row_data_val in row_data.iter_mut() {
+                acc = acc + *row_data_val;
+                *row_data_val = acc;
             }
         });
 
@@ -229,7 +229,7 @@ mod tests {
         let col_ptrs = Tensor::of_slice(&col_ptrs_data);
         let mut row_data = Tensor::of_slice(&row_data_data);
 
-        let result = csc_edge_cumsum::<f64>(&col_ptrs, &mut row_data).unwrap();
+        csc_edge_cumsum::<f64>(&col_ptrs, &mut row_data).unwrap();
 
         let result_data: Vec<f64> = row_data.into();
 

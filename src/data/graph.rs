@@ -69,6 +69,11 @@ impl<'a, Ty, Ptr: IndexType, Ix: IndexType> SparseGraph<'a, Ty, Ptr, Ix> {
     pub fn neighbors_slice(&self, x: NodeIdx<Ix>) -> &[NodeIdx<Ix>] {
         &self.indices[self.neighbors_range(x)]
     }
+
+    pub fn has_edge(&self, x: NodeIdx<Ix>, y: NodeIdx<Ix>) -> bool {
+        let neighbors = self.neighbors_slice(x);
+        neighbors.binary_search(&y).is_ok()
+    }
 }
 
 impl<'a, Ptr: IndexType, Ix: IndexType> CscGraph<'a, Ptr, Ix> {
