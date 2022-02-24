@@ -1,5 +1,6 @@
 from time import perf_counter
 
+import numpy as np
 import torch_geometric as pyg
 import torch_geometric.nn as pyg_nn
 import tch_geometric as thg
@@ -13,18 +14,21 @@ data = dataset[0]
 replace = False
 directed = False
 
+
 # colptr, row, perm = to_hetero_csc(data, device='cpu')
 colptr, row, perm = to_csc(data, device='cpu')
 index = torch.tensor([
     0, 1, 2, 3, 4, 5, 6, 7,
-    0, 1, 2, 3, 4, 5, 6, 7,
-    0, 1, 2, 3, 4, 5, 6, 7,
-    0, 1, 2, 3, 4, 5, 6, 7,
-    0, 1, 2, 3, 4, 5, 6, 7,
-    0, 1, 2, 3, 4, 5, 6, 7,
-    0, 1, 2, 3, 4, 5, 6, 7,
-    0, 1, 2, 3, 4, 5, 6, 7,
+    # 0, 1, 2, 3, 4, 5, 6, 7,
+    # 0, 1, 2, 3, 4, 5, 6, 7,
+    # 0, 1, 2, 3, 4, 5, 6, 7,
+    # 0, 1, 2, 3, 4, 5, 6, 7,
+    # 0, 1, 2, 3, 4, 5, 6, 7,
+    # 0, 1, 2, 3, 4, 5, 6, 7,
+    # 0, 1, 2, 3, 4, 5, 6, 7,
 ], dtype=torch.long)
+
+
 
 start = perf_counter()
 for i in range(200):

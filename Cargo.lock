@@ -438,7 +438,7 @@ dependencies = [
 name = "tch-geometric"
 version = "0.1.0"
 dependencies = [
- "num-traits",
+ "ndarray",
  "pyo3",
  "rand",
  "tch",
