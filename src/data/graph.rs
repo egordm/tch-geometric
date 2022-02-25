@@ -1,4 +1,6 @@
 use std::ops::Range;
+use tch::kind::Element;
+use tch::Tensor;
 use crate::utils::types::{DefaultIx, DefaultPtr, IndexType, NodeIdx, NodePtr};
 
 #[derive(Debug, Clone, Copy)]
@@ -85,6 +87,39 @@ impl<'a, Ptr: IndexType, Ix: IndexType> CscGraph<'a, Ptr, Ix> {
 impl<'a, Ptr: IndexType, Ix: IndexType> CsrGraph<'a, Ptr, Ix> {
     pub fn out_degree(&self, x: NodeIdx<Ix>) -> usize {
         self.neighbors_range(x).len()
+    }
+}
+
+pub struct EdgeIndexBuilder<Ix = DefaultIx, Ptr = DefaultPtr> {
+    pub cols: Vec<NodeIdx<Ix>>,
+    pub rows: Vec<NodeIdx<Ix>>,
+    pub edge_index: Vec<NodePtr<Ptr>>,
+}
+
+impl<Ix: IndexType + Element, Ptr: IndexType + Element> EdgeIndexBuilder<Ix, Ptr> {
+    pub fn new() -> Self {
+        EdgeIndexBuilder {
+            cols: Vec::new(),
+            rows: Vec::new(),
+            edge_index: Vec::new(),
+        }
+    }
+
+    pub fn push_edge(&mut self, src: NodeIdx<Ix>, dst: NodeIdx<Ix>, edge_index: NodePtr<Ptr>) {
+        self.cols.push(dst);
+        self.rows.push(src);
+        self.edge_index.push(edge_index);
+    }
+
+    pub fn to_tensor(&self) -> (Tensor, Tensor, Tensor) {
+        let cols = Tensor::of_slice(&self.cols);
+        let rows = Tensor::of_slice(&self.rows);
+        let edge_index = Tensor::of_slice(&self.edge_index);
+        (cols, rows, edge_index)
+    }
+    
+    pub fn len(&self) -> usize {
+        self.cols.len()
     }
 }
 

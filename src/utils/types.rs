@@ -6,6 +6,7 @@ pub type DefaultIx = i64;
 pub type NodeIdx<Ix = DefaultIx> = Ix;
 pub type NodePtr<Ix = DefaultIx> = Ix;
 pub type EdgeIdx<Ix = DefaultIx> = Ix;
+pub type EdgePtr<Ix = DefaultIx> = Ix;
 
 pub unsafe trait IndexType: Copy + Default + Hash + Ord + fmt::Debug + 'static {
     fn new(x: usize) -> Self;

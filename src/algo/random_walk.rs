@@ -75,21 +75,18 @@ mod tests {
     use std::path::PathBuf;
     use tch::Tensor;
     use crate::algo::random_walk::node2vec;
-    use crate::data::convert::CsrGraphData;
-    use crate::data::graph::CsrGraph;
+    use crate::data::{CsrGraphData, CsrGraph};
+    use crate::data::tests::load_karate_graph;
     use crate::utils::tensor::try_tensor_to_slice;
 
     #[test]
     fn test_node2vec() {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/karate.npz");
-        let data: HashMap<_, _> = Tensor::read_npz(&d).unwrap().into_iter().collect();
-        let x = &data["x"];
-        let edge_index = &data["edge_index"];
+        let (x, _, edge_index) = load_karate_graph();
 
-        let graph_data = CsrGraphData::try_from_edge_index(edge_index, x.size()[0]).unwrap();
+        let graph_data = CsrGraphData::try_from_edge_index(&edge_index, x.size()[0]).unwrap();
         let graph = CsrGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
-        let start = Tensor::of_slice(&[0 as i64, 1, 2, 3]);
+        let start = Tensor::of_slice(&[0_i64, 1, 2, 3]);
 
         let walks = node2vec(
             &graph,
