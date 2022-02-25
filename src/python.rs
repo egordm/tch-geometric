@@ -7,7 +7,6 @@ use tch::{Kind, Tensor};
 use crate::algo::neighbor_sampling::neighbor_sampling_homogenous;
 use crate::data::convert::CsrGraphData;
 use crate::data::graph::CsrGraph;
-use crate::utils::sampling::{ReplacementSampling, Sampling};
 use crate::utils::tensor::{TensorConversionError, try_tensor_to_slice};
 
 #[cfg(feature = "extension-module")]

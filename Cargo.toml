@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 [dependencies]
 thiserror = "1.0"
 rayon = "1.5.1"
+num-traits = "0.2"
 rand = { version = "0.8.5", features = ["small_rng"], default-features = false }
 pyo3 = { version = "0.15.1" }
 #tch = { git = "https://github.com/EgorDm/tch-rs.git", default-features = false }

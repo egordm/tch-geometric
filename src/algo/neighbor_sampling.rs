@@ -3,7 +3,7 @@ use std::convert::TryInto;
 use rand::SeedableRng;
 use tch::Tensor;
 use crate::data::graph::CsrGraph;
-use crate::utils::sampling::{ReplacementSampling, Sampling};
+use crate::utils::{replacement_sampling_range, reservoir_sampling};
 use crate::utils::tensor::{TensorResult, try_tensor_to_slice};
 use crate::utils::types::{NodeIdx, NodePtr};
 
@@ -28,11 +28,9 @@ pub fn neighbor_sampling_homogenous<
 
     let input_node_data = try_tensor_to_slice::<i64>(&input_node)?;
 
-
-    for i in 0..input_node_data.len() {
-        let v = input_node_data[i];
-        samples.push(v);
-        to_local_node.insert(v, i as NodePtr);
+    for (i, v) in input_node_data.iter().enumerate() {
+        samples.push(*v);
+        to_local_node.insert(*v, i as NodePtr);
     }
 
     let (mut rows, mut cols, mut edges) = (Vec::<NodeIdx>::new(), Vec::<NodeIdx>::new(), Vec::<NodeIdx>::new());
@@ -46,7 +44,7 @@ pub fn neighbor_sampling_homogenous<
             let neighbors_range = graph.neighbors_range(w);
             let neighbors = graph.neighbors_slice(w);
 
-            if neighbors.len() == 0 {
+            if neighbors.is_empty() {
                 continue
             }
 
@@ -70,9 +68,9 @@ pub fn neighbor_sampling_homogenous<
             } else {
                 // Randomly sample num_samples nodes from the neighbors of w
                 if REPLACE {
-                    neighbors_range.replacement_sample(&mut rng, &mut tmp_sample);
+                    replacement_sampling_range(&mut rng, &neighbors_range, &mut tmp_sample);
                 } else {
-                    neighbors_range.sample(&mut rng, &mut tmp_sample);
+                    reservoir_sampling(&mut rng, neighbors_range.into_iter(), &mut tmp_sample);
                 }
 
                 for (v, offset) in tmp_sample.iter().cloned().map(|o| (graph.indices[o], o)) {

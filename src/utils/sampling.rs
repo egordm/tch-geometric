@@ -1,79 +1,65 @@
-use std::ops::{Add, Range, Sub};
+use std::ops::{Add, Div, Range, Sub};
+use num_traits::Float;
 use rand::distributions::uniform::{SampleUniform};
 use rand::Rng;
 
-pub trait Sampling {
-    type Item;
+pub fn reservoir_sampling<T: Copy, I: Iterator<Item=T>>(
+    rng: &mut impl Rng,
+    mut src: I,
+    dst: &mut [I::Item]
+) {
+    for i in 0..dst.len() {
+        dst[i] = src.next().unwrap();
+    }
 
-    fn sample(
-        &self,
-        rng: &mut impl Rng,
-        dst: &mut [Self::Item],
-    );
-}
-
-impl<T: Copy> Sampling for &[T] {
-    type Item = T;
-
-    fn sample(&self, rng: &mut impl Rng, dst: &mut [Self::Item]) {
-        // Implementation of simple reservoir sampling
-        dst.copy_from_slice(&self[0..dst.len()]);
-
-        for i in dst.len()..self.len() {
-            let j = rng.gen_range(0..i);
-            if j < dst.len() {
-                dst[j] = self[i];
-            }
+    for (i, v) in src.enumerate() {
+        let j = rng.gen_range(0..i);
+        if j < dst.len() {
+            dst[j] = v;
         }
     }
 }
 
-impl<T: Copy + Add<Output=T> + Sub<Output=T> + From<usize> + Into<usize>> Sampling for Range<T> {
-    type Item = T;
+pub fn reservoir_sampling_weighted<
+    T: Copy, W: Float + SampleUniform, I: Iterator<Item=(T, W)>
+>(
+    rng: &mut impl Rng,
+    mut src: I,
+    dst: &mut [T]
+) {
+    let mut w_sum = W::zero();
+    for i in 0..dst.len() {
+        let (v, w) = src.next().unwrap();
+        dst[i] = v;
+        w_sum = w_sum + w;
+    }
 
-    fn sample(&self, rng: &mut impl Rng, dst: &mut [Self::Item]) {
-        let src_len = (self.end - self.start).into();
-
-        for (i, dst_val) in dst.iter_mut().enumerate() {
-            *dst_val = self.start + T::from(i);
-        }
-
-        for i in dst.len()..src_len {
-            let j = rng.gen_range(0..i);
-            if j < dst.len() {
-                dst[j] = self.start + T::from(i);
-            }
+    for (v, w) in src {
+        w_sum = w_sum + w;
+        let j = rng.gen_range(W::zero()..w_sum);
+        if j < w {
+            dst[rng.gen_range(0..dst.len())] = v;
         }
     }
 }
 
-pub trait ReplacementSampling {
-    type Item;
-
-    fn replacement_sample(
-        &self,
-        rng: &mut impl Rng,
-        dst: &mut [Self::Item],
-    );
-}
-
-impl<T: Copy> ReplacementSampling for &[T] {
-    type Item = T;
-
-    fn replacement_sample(&self, rng: &mut impl Rng, dst: &mut [Self::Item]) {
-        for dst_val in dst.iter_mut() {
-            let j = rng.gen_range(0..self.len());
-            *dst_val = self[j];
-        }
+pub fn replacement_sampling<T: Copy>(
+    rng: &mut impl Rng,
+    src: &[T],
+    dst: &mut [T]
+) {
+    for dst_val in dst.iter_mut() {
+        let j = rng.gen_range(0..src.len());
+        *dst_val = src[j];
     }
 }
 
-impl<T: SampleUniform + PartialOrd + Copy> ReplacementSampling for Range<T> {
-    type Item = T;
-
-    fn replacement_sample(&self, rng: &mut impl Rng, dst: &mut [Self::Item]) {
-        for dst_val in dst.iter_mut() {
-            *dst_val = rng.gen_range(self.clone());
-        }
+pub fn replacement_sampling_range<T: Copy + SampleUniform + PartialOrd>(
+    rng: &mut impl Rng,
+    src: &Range<T>,
+    dst: &mut [T]
+) {
+    for dst_val in dst.iter_mut() {
+        *dst_val = rng.gen_range(src.clone());
     }
 }
