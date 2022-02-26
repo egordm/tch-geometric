@@ -1,17 +1,17 @@
-use rand::{Rng, SeedableRng};
+use rand::{Rng};
+use rand::rngs::SmallRng;
 use tch::{Kind, Scalar, Tensor};
 use crate::data::graph::CsrGraph;
 use crate::utils::tensor::{TensorResult, try_tensor_to_slice, try_tensor_to_slice_mut};
 
-pub fn node2vec(
+pub fn random_walk(
+    rng: &mut SmallRng,
     graph: &CsrGraph,
     start: &Tensor,
     walk_length: i64,
     p: f32,
     q: f32,
 ) -> TensorResult<Tensor> {
-    let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
-
     let L = (walk_length + 1) as usize;
     let mut walks = Tensor::full(
         &[start.size()[0], L as i64],
@@ -70,17 +70,18 @@ pub fn node2vec(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::convert::{TryFrom, TryInto};
-    use std::path::PathBuf;
+    use std::convert::{TryFrom};
+    use rand::SeedableRng;
     use tch::Tensor;
-    use crate::algo::random_walk::node2vec;
+    use crate::algo::random_walk::random_walk;
     use crate::data::{CsrGraphData, CsrGraph};
     use crate::data::tests::load_karate_graph;
     use crate::utils::tensor::try_tensor_to_slice;
 
     #[test]
-    fn test_node2vec() {
+    fn test_randomwalk() {
+        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
+
         let (x, _, edge_index) = load_karate_graph();
 
         let graph_data = CsrGraphData::try_from_edge_index(&edge_index, x.size()[0]).unwrap();
@@ -88,7 +89,8 @@ mod tests {
 
         let start = Tensor::of_slice(&[0_i64, 1, 2, 3]);
 
-        let walks = node2vec(
+        let walks = random_walk(
+            &mut rng,
             &graph,
             &start,
             10,

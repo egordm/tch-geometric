@@ -1,6 +1,4 @@
 use std::fmt::Debug;
-use std::ops::{Index, IndexMut};
-use std::slice::SliceIndex;
 
 #[derive(Debug)]
 pub struct OrdHeap<'a, T: Debug> {
@@ -20,7 +18,7 @@ impl<'a, T: Debug + Copy> OrdHeap<'a, T> {
         if self.size == 0 {
             None
         } else {
-            Some(&self.unchecked_head())
+            Some(self.unchecked_head())
         }
     }
 
@@ -89,7 +87,7 @@ impl<'a, T: Debug + Copy> OrdHeap<'a, T> {
 
     pub fn sift_down_by<
         F: Fn(&T, &T) -> bool
-    >(&mut self, mut i: usize, f: F) {
+    >(&mut self, i: usize, f: F) {
         let mut j = i;
         let (l, r) = (self.left_child(i), self.right_child(i));
         if l <= self.size && f(&self.data[l], &self.data[j]) { j = l }
@@ -102,13 +100,13 @@ impl<'a, T: Debug + Copy> OrdHeap<'a, T> {
 
     pub fn sift_down_by_value<
         W: PartialOrd, F: Fn(&T) -> W
-    >(&mut self, mut i: usize, f: F) {
+    >(&mut self, i: usize, f: F) {
         self.sift_down_by(i, |a, b| f(a) < f(b))
     }
 
     pub fn sift_up_by<
         F: Fn(&T, &T) -> bool
-    >(&mut self, mut i: usize, f: F) {
+    >(&mut self, i: usize, f: F) {
         let mut j = i;
         let mut p = self.parent(j);
         while j > 1 && f(&self.data[j], &self.data[p]) {
@@ -120,7 +118,7 @@ impl<'a, T: Debug + Copy> OrdHeap<'a, T> {
 
     pub fn sift_up_by_value<
         W: PartialOrd, F: Fn(&T) -> W
-    >(&mut self, mut i: usize, f: F) {
+    >(&mut self, i: usize, f: F) {
         self.sift_up_by(i, |a, b| f(a) < f(b))
     }
 

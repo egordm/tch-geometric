@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Range, Sub};
+use std::ops::{Range};
 use num_traits::Float;
 use rand::distributions::uniform::{SampleUniform};
 use rand::Rng;
@@ -8,8 +8,8 @@ pub fn reservoir_sampling<T: Copy, I: Iterator<Item=T>>(
     mut src: I,
     dst: &mut [I::Item]
 ) {
-    for i in 0..dst.len() {
-        dst[i] = src.next().unwrap();
+    for dst_val in dst.iter_mut() {
+        *dst_val = src.next().unwrap();
     }
 
     for (i, v) in src.enumerate() {
@@ -28,9 +28,9 @@ pub fn reservoir_sampling_weighted<
     dst: &mut [T]
 ) {
     let mut w_sum = W::zero();
-    for i in 0..dst.len() {
+    for dst_v in dst.iter_mut() {
         let (v, w) = src.next().unwrap();
-        dst[i] = v;
+        *dst_v = v;
         w_sum = w_sum + w;
     }
 

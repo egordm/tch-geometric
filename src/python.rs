@@ -1,246 +1,175 @@
-use std::collections::{HashMap, HashSet};
-use std::convert::TryInto;
-use pyo3::exceptions::PyTypeError;
+#![allow(clippy::type_complexity)]
+
 use pyo3::prelude::*;
-use rand::{Rng, SeedableRng};
-use tch::{Kind, Tensor};
-use crate::algo::neighbor_sampling::neighbor_sampling_homogenous;
-use crate::data::convert::CsrGraphData;
-use crate::data::graph::CsrGraph;
-use crate::utils::tensor::{TensorConversionError, try_tensor_to_slice};
 
-#[cfg(feature = "extension-module")]
-#[pyfunction]
-fn sum_as_string(a: Tensor, b: Tensor) -> PyResult<Tensor> {
-    Ok(a + &b)
-}
+mod data {
+    use pyo3::prelude::*;
+    use tch::Tensor;
+    use crate::data::{CscGraphData, CsrGraphData};
 
-// type NodeType = String;
-// type RelType = String;
-// type EdgeType = (NodeType, RelType, NodeType);
+    #[pyfunction]
+    pub fn to_csc(
+        edge_index: Tensor,
+        m: i64,
+    ) -> (Tensor, Tensor, Tensor) {
+        let CscGraphData {
+            ptrs, indices, perm, ..
+        } = CscGraphData::try_from_edge_index(&edge_index, m).unwrap();
 
-type NodeIdx = i64;
-type OutputNodeIdx = i64;
-type EdgeIdx = i64;
-
-
-#[cfg(feature = "extension-module")]
-#[pyfunction]
-fn sample_own_custom(
-    colptr: Tensor,
-    row: Tensor,
-    input_node: Tensor,
-    num_neighbors: Vec<i64>,
-    replace: bool,
-    directed: bool,
-) -> PyResult<(
-    Tensor,
-    Tensor,
-    Tensor,
-    Tensor,
-)> {
-    let ptrs = try_tensor_to_slice(&colptr)?;
-    let indices = try_tensor_to_slice(&row)?;
-    let graph = CsrGraph::new(ptrs, indices);
-
-    Ok(match (replace, directed) {
-        (true, true) => neighbor_sampling_homogenous::<true, true>(&graph, input_node, num_neighbors),
-        (true, false) => neighbor_sampling_homogenous::<true, false>(&graph, input_node, num_neighbors),
-        (false, true) => neighbor_sampling_homogenous::<false, true>(&graph, input_node, num_neighbors),
-        (false, false) => neighbor_sampling_homogenous::<false, false>(&graph, input_node, num_neighbors),
-    }?)
-}
-
-#[cfg(feature = "extension-module")]
-#[pyfunction]
-fn sample(
-    colptr: Tensor,
-    row: Tensor,
-    input_node: Tensor,
-    num_neighbors: Vec<i64>,
-    replace: bool,
-    directed: bool,
-) -> PyResult<(
-    Tensor,
-    Tensor,
-    Tensor,
-    Tensor,
-)> {
-    let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
-
-    // Initialize some data structures for the sampling process:
-    let mut samples: Vec<NodeIdx> = Vec::new();
-    let mut to_local_node: HashMap<NodeIdx, OutputNodeIdx> = HashMap::new();
-
-    let colptr_data = if colptr.kind() == Kind::Int64 {
-        unsafe { std::slice::from_raw_parts(colptr.data_ptr() as *const NodeIdx, colptr.size()[0] as usize) }
-    } else {
-        return Err(PyTypeError::new_err("colptr must be int64"));
-    };
-    let row_data = if row.kind() == Kind::Int64 {
-        unsafe { std::slice::from_raw_parts(row.data_ptr() as *const NodeIdx, row.size()[0] as usize) }
-    } else {
-        return Err(PyTypeError::new_err("row must be int64"));
-    };
-    let input_node_data = if input_node.kind() == Kind::Int64 {
-        unsafe { std::slice::from_raw_parts(input_node.data_ptr() as *const NodeIdx, input_node.size()[0] as usize) }
-    } else {
-        return Err(PyTypeError::new_err("input_node must be int64"));
-    };
-
-    for i in 0..input_node_data.len() {
-        let v = input_node_data[i];
-        samples.push(v);
-        to_local_node.insert(v, i as OutputNodeIdx);
+        (
+            ptrs, indices, perm
+        )
     }
 
-    let (mut rows, mut cols, mut edges) = (Vec::<NodeIdx>::new(), Vec::<NodeIdx>::new(), Vec::<NodeIdx>::new());
+    #[pyfunction]
+    pub fn to_csr(
+        edge_index: Tensor,
+        m: i64,
+    ) -> (Tensor, Tensor, Tensor) {
+        let CsrGraphData {
+            ptrs, indices, perm, ..
+        } = CsrGraphData::try_from_edge_index(&edge_index, m).unwrap();
 
-    let (mut begin, mut end) = (0, samples.len());
-    for ell in 0..num_neighbors.len() {
-        // foreach layer, sample num_samples neighbors
-        let num_samples = num_neighbors[ell];
-
-        for i in begin..end {
-            // foreach node in layer (in samples stack), sample num_samples neighbors
-            let w = samples[i]; // node id
-            let wu = w as usize;
-            let col_start = colptr_data[wu]; // Col index value
-            let col_end = colptr_data[(wu + 1)]; // Next Col index value
-            let col_count = col_end - col_start; // Amount of edges for given node
-
-            if col_count == 0 {
-                // If no edges, skip
-                continue;
-            }
-
-            if (num_samples < 0) || (!replace && (num_samples > col_count)) {
-                // If num_samples is negative,
-                // or if we are not replacing and num_samples is greater than the number of edges,
-                // then we sample all the edges
-
-                for offset in col_start as usize..col_end as usize {
-                    // for each neighbor of sample
-
-                    let v = row_data[offset]; // neighbor node id
-                    let res = to_local_node.insert(v, samples.len() as OutputNodeIdx); // register node in output list
-
-                    samples.push(v); // add neighbor to output list
-                    if directed {
-                        // if directed, add edge to output graph (because it matters)
-                        cols.push(i as NodeIdx);
-                        rows.push(res.unwrap());
-                        edges.push(offset as EdgeIdx);
-                    }
-                }
-            } else if replace {
-                // sample neighbors with replacement
-
-                for _ in 0..num_samples {
-                    let offset = col_start + rng.gen_range(0..col_count); // random neighbor offset in matrix
-                    let v = row_data[offset as usize]; // neighbor node id
-                    let res = to_local_node.insert(v, samples.len() as OutputNodeIdx); // register node in output list
-
-                    samples.push(v); // add neighbor to output list
-                    if directed {
-                        // if directed, add edge to output graph (because it matters)
-                        cols.push(i as NodeIdx);
-                        rows.push(res.unwrap());
-                        edges.push(offset);
-                    }
-                }
-            } else {
-                // sample neighbors without replacement
-
-                let mut rnd_indices = HashSet::new();
-                for j in col_count - num_samples..col_count {
-                    // start at first col_count - num_samples and go to last col_count
-                    // (adding an additional possible node each time)
-                    let mut rnd = rng.gen_range(0..j);
-                    if !rnd_indices.insert(rnd) {
-                        // if it was already picked, then instead add j
-                        rnd = j;
-                        rnd_indices.insert(j);
-                    }
-
-                    let offset = col_start + rnd; // random neighbor offset in matrix
-                    let v = row_data[offset as usize]; // neighbor node id
-                    let res = to_local_node.insert(v, samples.len() as OutputNodeIdx); // register node in output list
-
-                    samples.push(v); // add neighbor to output list
-                    if directed {
-                        // if directed, add edge to output graph (because it matters)
-                        cols.push(i as NodeIdx);
-                        rows.push(res.unwrap());
-                        edges.push(offset);
-                    }
-                }
-            }
-        }
-        // set begin to the old end to avoid sampling same nodes twice. and repeat
-        begin = end;
-        end = samples.len();
+        (
+            ptrs, indices, perm
+        )
     }
 
-    if !directed {
-        // if undirected, we need to add edges in both directions
-        for i in 0..samples.len() as OutputNodeIdx {
-            // for each sample
 
-            let w = samples[i as usize]; // sample node id
-            let col_start = colptr_data[w as usize]; // Col index value
-            let col_end = colptr_data[(w + 1) as usize]; // Next Col index value
-
-            for offset in col_start..col_end {
-                // for each neighbor of sample
-
-                let v = row_data[offset as usize]; // neighbor node id
-                let res = to_local_node.get(&v); // find neighbor in output list
-                if let Some(res) = res.cloned() {
-                    // if neighbor is in output list
-                    cols.push(i); // add sample to row
-                    rows.push(res); // add edge to output graph
-                    edges.push(offset);
-                }
-            }
-        }
+    pub fn module(py: Python, p: &PyModule) -> PyResult<()> {
+        let m = PyModule::new(py, "data")?;
+        m.add_function(wrap_pyfunction!(to_csc, m)?)?;
+        m.add_function(wrap_pyfunction!(to_csr, m)?)?;
+        p.add_submodule(m)?;
+        Ok(())
     }
-
-    Ok((
-        samples.try_into().expect("Cant convert vec into tensor"),
-        rows.try_into().expect("Cant convert vec into tensor"),
-        cols.try_into().expect("Cant convert vec into tensor"),
-        edges.try_into().expect("Cant convert vec into tensor"),
-    ))
 }
 
+mod algo {
+    use std::convert::TryInto;
+    use pyo3::prelude::*;
+    use rand::SeedableRng;
+    use tch::Tensor;
+    use crate::data::{CscGraph, CsrGraph};
+    use crate::utils::{EdgePtr, NodePtr, try_tensor_to_slice};
 
-/*#[pyfunction]
-fn hetero_sample<'a>(
-    node_types: Vec<&'a NodeType>,
-    edge_types: Vec<&'a EdgeType>,
-    colptr_dict: HashMap<&'a RelType, Tensor>,
-    row_dict: HashMap<&'a RelType, Tensor>,
-    input_node_dict: HashMap<&'a NodeType, Tensor>,
-    num_neighbors_dict: HashMap<&'a RelType, Vec<i64>>,
-    num_hops: i64,
-) -> (
-    HashMap<&'a NodeType, Tensor>,
-    HashMap<&'a RelType, Tensor>,
-    HashMap<&'a RelType, Tensor>,
-    HashMap<&'a RelType, Tensor>,
-) {
+    #[pyfunction]
+    pub fn neighbor_sampling_homogenous(
+        col_ptrs: Tensor,
+        row_indices: Tensor,
+        inputs: Tensor,
+        num_neighbors: Vec<usize>,
+        replace: bool,
+    ) -> PyResult<(
+        Tensor,
+        Tensor,
+        Tensor,
+        Vec<(NodePtr, EdgePtr)>
+    )> {
+        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
-    unimplemented!()
-}*/
+        let ptrs = try_tensor_to_slice::<i64>(&col_ptrs)?;
+        let indices = try_tensor_to_slice::<i64>(&row_indices)?;
+        let graph = CscGraph::new(ptrs, indices);
 
+        let inputs_data = try_tensor_to_slice::<i64>(&inputs)?;
 
-#[cfg(feature = "extension-module")]
+        let (samples, edge_index, layer_offsets) = match replace {
+            true => crate::algo::neighbor_sampling::neighbor_sampling_homogenous::<true>(&mut rng, &graph, inputs_data, &num_neighbors),
+            false => crate::algo::neighbor_sampling::neighbor_sampling_homogenous::<false>(&mut rng, &graph, inputs_data, &num_neighbors),
+        };
+
+        let samples = samples.try_into().expect("Can't convert vec into tensor");
+        let cols = edge_index.cols.try_into().expect("Can't convert vec into tensor");
+        let rows = edge_index.rows.try_into().expect("Can't convert vec into tensor");
+
+        Ok((
+            samples,
+            cols,
+            rows,
+            layer_offsets,
+        ))
+    }
+
+    #[pyfunction]
+    pub fn neighbor_sampling_homogenous_weighted(
+        col_ptrs: Tensor,
+        row_indices: Tensor,
+        edge_weights: Tensor,
+        inputs: Tensor,
+        num_neighbors: Vec<usize>,
+    ) -> PyResult<(
+        Tensor,
+        Tensor,
+        Tensor,
+        Vec<(NodePtr, EdgePtr)>
+    )>
+    {
+        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
+
+        let ptrs = try_tensor_to_slice::<i64>(&col_ptrs)?;
+        let indices = try_tensor_to_slice::<i64>(&row_indices)?;
+        let weights = try_tensor_to_slice::<f64>(&edge_weights)?;
+        let graph = CscGraph::new(ptrs, indices);
+
+        let inputs_data = try_tensor_to_slice::<i64>(&inputs)?;
+
+        let (samples, edge_index, layer_offsets) = crate::algo::neighbor_sampling::neighbor_sampling_homogenous_weighted(
+            &mut rng, &graph, weights, inputs_data, &num_neighbors,
+        );
+
+        let samples = samples.try_into().expect("Can't convert vec into tensor");
+        let cols = edge_index.cols.try_into().expect("Can't convert vec into tensor");
+        let rows = edge_index.rows.try_into().expect("Can't convert vec into tensor");
+
+        Ok((
+            samples,
+            cols,
+            rows,
+            layer_offsets,
+        ))
+    }
+
+    #[pyfunction]
+    pub fn random_walk(
+        row_ptrs: Tensor,
+        col_indices: Tensor,
+        start: Tensor,
+        walk_length: i64,
+        p: f32,
+        q: f32,
+    ) -> PyResult<Tensor> {
+        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
+
+        let ptrs = try_tensor_to_slice::<i64>(&row_ptrs)?;
+        let indices = try_tensor_to_slice::<i64>(&col_indices)?;
+        let graph = CsrGraph::new(ptrs, indices);
+
+        let walks = crate::algo::random_walk::random_walk(
+            &mut rng,
+            &graph,
+            &start,
+            walk_length,
+            p,
+            q,
+        )?;
+
+        Ok(walks)
+    }
+
+    pub fn module(py: Python, p: &PyModule) -> PyResult<()> {
+        let m = PyModule::new(py, "algo")?;
+        m.add_function(wrap_pyfunction!(neighbor_sampling_homogenous, m)?)?;
+        m.add_function(wrap_pyfunction!(neighbor_sampling_homogenous_weighted, m)?)?;
+        m.add_function(wrap_pyfunction!(random_walk, m)?)?;
+        p.add_submodule(m)?;
+        Ok(())
+    }
+}
+
 #[pymodule]
-fn tch_geometric(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(sum_as_string, m)?)?;
-    // m.add_function(wrap_pyfunction!(hetero_sample, m)?)?;
-    m.add_function(wrap_pyfunction!(sample, m)?)?;
-    m.add_function(wrap_pyfunction!(sample_own_custom, m)?)?;
+fn tch_geometric(py: Python, m: &PyModule) -> PyResult<()> {
+    algo::module(py, m)?;
+    data::module(py, m)?;
     Ok(())
 }
