@@ -8,15 +8,17 @@ pub fn reservoir_sampling<T: Copy, I: Iterator<Item=T>>(
     mut src: I,
     dst: &mut [I::Item]
 ) {
-    for dst_val in dst.iter_mut() {
-        *dst_val = src.next().unwrap();
+    for (dst_val,  src_val) in dst.iter_mut().zip(src.by_ref()) {
+        *dst_val = src_val;
     }
-
-    for (i, v) in src.enumerate() {
+        
+    let mut i = dst.len();
+    for v in src {
         let j = rng.gen_range(0..i);
         if j < dst.len() {
             dst[j] = v;
         }
+        i += 1;
     }
 }
 
