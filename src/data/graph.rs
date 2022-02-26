@@ -91,8 +91,8 @@ impl<'a, Ptr: IndexType, Ix: IndexType> CsrGraph<'a, Ptr, Ix> {
 }
 
 pub struct EdgeIndexBuilder<Ix = DefaultIx, Ptr = DefaultPtr> {
-    pub cols: Vec<NodeIdx<Ix>>,
     pub rows: Vec<NodeIdx<Ix>>,
+    pub cols: Vec<NodeIdx<Ix>>,
     pub edge_index: Vec<NodePtr<Ptr>>,
 }
 
@@ -106,8 +106,8 @@ impl<Ix: IndexType + Element, Ptr: IndexType + Element> EdgeIndexBuilder<Ix, Ptr
     }
 
     pub fn push_edge(&mut self, src: NodeIdx<Ix>, dst: NodeIdx<Ix>, edge_index: NodePtr<Ptr>) {
-        self.cols.push(dst);
         self.rows.push(src);
+        self.cols.push(dst);
         self.edge_index.push(edge_index);
     }
 

@@ -56,7 +56,7 @@ pub fn neighbor_sampling_homogenous_weighted<
                 let edge_ptr = neighbors_range.start + neighbor_idx;
 
                 samples.push(v);
-                edge_index.push_edge(i as i64, j as i64, edge_ptr as i64);
+                edge_index.push_edge(j as i64, i as i64, edge_ptr as i64);
             }
         }
 
@@ -124,7 +124,7 @@ pub fn neighbor_sampling_homogenous<
                 let edge_ptr = neighbors_range.start + neighbor_idx;
 
                 samples.push(v);
-                edge_index.push_edge(i as i64, j as i64, edge_ptr as i64);
+                edge_index.push_edge(j as i64, i as i64, edge_ptr as i64);
             }
         }
 
@@ -167,9 +167,9 @@ mod tests {
             &num_neighbors
         );
 
-        for (i, j) in edge_index.cols.iter().zip(edge_index.rows.iter()) {
-            let v = samples[*i as usize];
-            let w = samples[*j as usize];
+        for (j, i) in edge_index.rows.iter().zip(edge_index.cols.iter()) {
+            let v = samples[*j as usize];
+            let w = samples[*i as usize];
             assert!(graph.has_edge(v, w));
         }
 
@@ -178,8 +178,8 @@ mod tests {
             counts[i] += 1;
         }
 
-        for (i, j) in edge_index.cols.iter().rev().zip(edge_index.rows.iter().rev()) {
-            counts[*j as usize] += counts[*i as usize];
+        for (j, i) in edge_index.rows.iter().rev().zip(edge_index.cols.iter().rev()) {
+            counts[*i as usize] += counts[*j as usize];
         }
 
         let mut begin = 0;
@@ -211,9 +211,9 @@ mod tests {
             &num_neighbors
         );
 
-        for (i, j) in edge_index.cols.iter().zip(edge_index.rows.iter()) {
-            let v = samples[*i as usize];
-            let w = samples[*j as usize];
+        for (j, i) in edge_index.rows.iter().zip(edge_index.cols.iter()) {
+            let v = samples[*j as usize];
+            let w = samples[*i as usize];
             assert!(graph.has_edge(v, w));
         }
 
@@ -222,8 +222,8 @@ mod tests {
             counts[i] += 1;
         }
 
-        for (i, j) in edge_index.cols.iter().rev().zip(edge_index.rows.iter().rev()) {
-            counts[*j as usize] += counts[*i as usize];
+        for (j, i) in edge_index.rows.iter().rev().zip(edge_index.cols.iter().rev()) {
+            counts[*i as usize] += counts[*j as usize];
         }
 
         let mut begin = 0;

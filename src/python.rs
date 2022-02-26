@@ -64,6 +64,7 @@ mod algo {
         Tensor,
         Tensor,
         Tensor,
+        Tensor,
         Vec<(NodePtr, EdgePtr)>
     )> {
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
@@ -80,13 +81,15 @@ mod algo {
         };
 
         let samples = samples.try_into().expect("Can't convert vec into tensor");
-        let cols = edge_index.cols.try_into().expect("Can't convert vec into tensor");
         let rows = edge_index.rows.try_into().expect("Can't convert vec into tensor");
+        let cols = edge_index.cols.try_into().expect("Can't convert vec into tensor");
+        let edge_index = edge_index.edge_index.try_into().expect("Can't convert vec into tensor");
 
         Ok((
             samples,
-            cols,
             rows,
+            cols,
+            edge_index,
             layer_offsets,
         ))
     }
@@ -99,6 +102,7 @@ mod algo {
         inputs: Tensor,
         num_neighbors: Vec<usize>,
     ) -> PyResult<(
+        Tensor,
         Tensor,
         Tensor,
         Tensor,
@@ -119,13 +123,15 @@ mod algo {
         );
 
         let samples = samples.try_into().expect("Can't convert vec into tensor");
-        let cols = edge_index.cols.try_into().expect("Can't convert vec into tensor");
         let rows = edge_index.rows.try_into().expect("Can't convert vec into tensor");
+        let cols = edge_index.cols.try_into().expect("Can't convert vec into tensor");
+        let edge_index = edge_index.edge_index.try_into().expect("Can't convert vec into tensor");
 
         Ok((
             samples,
-            cols,
             rows,
+            cols,
+            edge_index,
             layer_offsets,
         ))
     }
