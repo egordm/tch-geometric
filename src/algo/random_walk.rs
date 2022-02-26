@@ -33,7 +33,7 @@ pub fn random_walk(
     let prob2 = 1.0 / q / max_prob;
 
     for (i, n) in start_data.iter().enumerate() {
-        let mut prev = *n;
+        let mut prev = -1;
         let mut cur = *n;
         walks_data[i * L] = cur;
 
@@ -53,9 +53,9 @@ pub fn random_walk(
                 } else if graph.has_edge(next, prev) {
                     // visiting the node with the distance of 1 between the previous node
                     if r < prob1 { break; }
-                } else if next == prev + 2 {
+                } else if r < prob2 {
                     // visiting the node with the distance of 2 between the previous node
-                    if r < prob2 { break; }
+                    break;
                 }
             }
 

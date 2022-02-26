@@ -169,7 +169,7 @@ mod algo {
 
 #[pymodule]
 fn tch_geometric(py: Python, m: &PyModule) -> PyResult<()> {
-    algo::module(py, m)?;
     data::module(py, m)?;
+    algo::module(py, m)?;
     Ok(())
 }
