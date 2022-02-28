@@ -17,12 +17,12 @@ mod random {
     }
 
     pub fn reseed(seed: [u8; 32]) {
-        let mut rng = RNG.lock().unwrap();
+        let rng = RNG.lock().unwrap();
         rng.replace(SmallRng::from_seed(seed));
     }
 
     pub fn get() -> SmallRng {
-        let mut guard = RNG.lock().unwrap();
+        let guard = RNG.lock().unwrap();
         let mut rng = guard.borrow_mut();
         let seed = [
             rng.next_u64(),
@@ -82,7 +82,8 @@ mod algo {
     use std::convert::TryInto;
     use pyo3::prelude::*;
     use tch::Tensor;
-    use crate::data::{CscGraph, CsrGraph};
+    use crate::algo::neighbor_sampling::{UnweightedSampler, WeightedSampler};
+    use crate::data::{CscGraph, CsrGraph, EdgeAttr};
     use crate::utils::{EdgePtr, NodePtr, try_tensor_to_slice};
 
     #[pyfunction]
@@ -108,8 +109,12 @@ mod algo {
         let inputs_data = try_tensor_to_slice::<i64>(&inputs)?;
 
         let (samples, edge_index, layer_offsets) = match replace {
-            true => crate::algo::neighbor_sampling::neighbor_sampling_homogenous::<true>(&mut rng, &graph, inputs_data, &num_neighbors),
-            false => crate::algo::neighbor_sampling::neighbor_sampling_homogenous::<false>(&mut rng, &graph, inputs_data, &num_neighbors),
+            true => crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
+                &mut rng, &graph, &UnweightedSampler::<true>, inputs_data, &num_neighbors
+            ),
+            false => crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
+                &mut rng, &graph, &UnweightedSampler::<false>, inputs_data, &num_neighbors
+            ),
         };
 
         let samples = samples.try_into().expect("Can't convert vec into tensor");
@@ -147,11 +152,13 @@ mod algo {
         let indices = try_tensor_to_slice::<i64>(&row_indices)?;
         let weights = try_tensor_to_slice::<f64>(&edge_weights)?;
         let graph = CscGraph::new(ptrs, indices);
+        let weights_attr = EdgeAttr::new(&weights);
+
 
         let inputs_data = try_tensor_to_slice::<i64>(&inputs)?;
 
-        let (samples, edge_index, layer_offsets) = crate::algo::neighbor_sampling::neighbor_sampling_homogenous_weighted(
-            &mut rng, &graph, weights, inputs_data, &num_neighbors,
+        let (samples, edge_index, layer_offsets) = crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
+            &mut rng, &graph, &WeightedSampler::new(weights_attr), inputs_data, &num_neighbors,
         );
 
         let samples = samples.try_into().expect("Can't convert vec into tensor");
