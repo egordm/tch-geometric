@@ -524,6 +524,7 @@ dependencies = [
 [[package]]
 name = "tch"
 version = "0.6.1"
+source = "git+https://github.com/EgorDm/tch-rs.git#a0c127ced3d14b830ffbf70ac9685460b223c776"
 dependencies = [
  "half",
  "lazy_static",
@@ -540,6 +541,7 @@ dependencies = [
 name = "tch-geometric"
 version = "0.1.0"
 dependencies = [
+ "lazy_static",
  "ndarray",
  "num-traits",
  "pyo3",
@@ -582,6 +584,7 @@ dependencies = [
 [[package]]
 name = "torch-sys"
 version = "0.6.1"
+source = "git+https://github.com/EgorDm/tch-rs.git#a0c127ced3d14b830ffbf70ac9685460b223c776"
 dependencies = [
  "anyhow",
  "cc",

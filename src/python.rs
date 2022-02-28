@@ -2,6 +2,39 @@
 
 use pyo3::prelude::*;
 
+
+mod random {
+    use std::cell::RefCell;
+    use std::sync::Mutex;
+    use lazy_static::lazy_static;
+    use rand::rngs::SmallRng;
+    use rand::{RngCore, SeedableRng};
+
+    lazy_static! {
+        static ref RNG: Mutex<RefCell<SmallRng>> = {
+            Mutex::new(RefCell::new(SmallRng::from_entropy()))
+        };
+    }
+
+    pub fn reseed(seed: [u8; 32]) {
+        let mut rng = RNG.lock().unwrap();
+        rng.replace(SmallRng::from_seed(seed));
+    }
+
+    pub fn get() -> SmallRng {
+        let mut guard = RNG.lock().unwrap();
+        let mut rng = guard.borrow_mut();
+        let seed = [
+            rng.next_u64(),
+            rng.next_u64(),
+            rng.next_u64(),
+            rng.next_u64(),
+        ];
+        let seed = unsafe { std::mem::transmute::<[u64; 4], [u8; 32]>(seed) };
+        SmallRng::from_seed(seed)
+    }
+}
+
 mod data {
     use pyo3::prelude::*;
     use tch::Tensor;
@@ -48,7 +81,6 @@ mod data {
 mod algo {
     use std::convert::TryInto;
     use pyo3::prelude::*;
-    use rand::SeedableRng;
     use tch::Tensor;
     use crate::data::{CscGraph, CsrGraph};
     use crate::utils::{EdgePtr, NodePtr, try_tensor_to_slice};
@@ -67,7 +99,7 @@ mod algo {
         Tensor,
         Vec<(NodePtr, EdgePtr)>
     )> {
-        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
+        let mut rng = super::random::get();
 
         let ptrs = try_tensor_to_slice::<i64>(&col_ptrs)?;
         let indices = try_tensor_to_slice::<i64>(&row_indices)?;
@@ -109,7 +141,7 @@ mod algo {
         Vec<(NodePtr, EdgePtr)>
     )>
     {
-        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
+        let mut rng = super::random::get();
 
         let ptrs = try_tensor_to_slice::<i64>(&col_ptrs)?;
         let indices = try_tensor_to_slice::<i64>(&row_indices)?;
@@ -145,7 +177,7 @@ mod algo {
         p: f32,
         q: f32,
     ) -> PyResult<Tensor> {
-        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
+        let mut rng = super::random::get();
 
         let ptrs = try_tensor_to_slice::<i64>(&row_ptrs)?;
         let indices = try_tensor_to_slice::<i64>(&col_indices)?;
