@@ -1,5 +1,8 @@
-use pyo3::{PyErr};
-use pyo3::exceptions::PyValueError;
+#[cfg(feature = "extension-module")]
+use pyo3::{
+    PyErr,
+    exceptions::PyValueError
+};
 use thiserror::Error;
 use tch::kind::Element;
 use tch::{Device, Kind, Tensor};
@@ -14,6 +17,7 @@ pub enum TensorConversionError {
     InvalidShape(Option<String>),
 }
 
+#[cfg(feature = "extension-module")]
 impl From<TensorConversionError> for PyErr {
     fn from(error: TensorConversionError) -> Self {
         PyValueError::new_err(error.to_string())
