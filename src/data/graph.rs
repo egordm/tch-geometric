@@ -1,6 +1,7 @@
 use std::ops::Range;
 use tch::kind::Element;
 use tch::Tensor;
+use crate::utils::EdgePtr;
 use crate::utils::types::{DefaultIx, DefaultPtr, IndexType, NodeIdx, NodePtr};
 
 #[derive(Debug, Clone, Copy)]
@@ -57,11 +58,11 @@ impl<'a, Ty, Ptr: IndexType, Ix: IndexType> SparseGraph<'a, Ty, Ptr, Ix> {
     }
 
     #[inline(always)]
-    fn edge_offset(&self, node: NodeIdx<Ix>) -> NodePtr<Ptr> {
+    fn edge_offset(&self, node: NodeIdx<Ix>) -> EdgePtr<Ptr> {
         self.ptrs[node.index()]
     }
 
-    pub fn neighbors_range(&self, x: NodeIdx<Ix>) -> Range<usize> {
+    pub fn neighbors_range(&self, x: NodeIdx<Ix>) -> Range<EdgePtr<usize>> {
         let node = x.index();
         let start = self.ptrs[node].index();
         let end = self.ptrs[node + 1].index();
@@ -70,6 +71,10 @@ impl<'a, Ty, Ptr: IndexType, Ix: IndexType> SparseGraph<'a, Ty, Ptr, Ix> {
 
     pub fn neighbors_slice(&self, x: NodeIdx<Ix>) -> &[NodeIdx<Ix>] {
         &self.indices[self.neighbors_range(x)]
+    }
+
+    pub fn get_by_ptr(&self, ptr: EdgePtr<usize>) -> NodeIdx<Ix> {
+        self.indices[ptr]
     }
 
     pub fn has_edge(&self, x: NodeIdx<Ix>, y: NodeIdx<Ix>) -> bool {
@@ -89,6 +94,26 @@ impl<'a, Ptr: IndexType, Ix: IndexType> CsrGraph<'a, Ptr, Ix> {
         self.neighbors_range(x).len()
     }
 }
+
+#[derive(Debug)]
+pub struct EdgeAttr<'a, T> {
+    pub data: &'a [T],
+}
+
+impl<'a, T> EdgeAttr<'a, T> {
+    pub fn new(data: &'a [T]) -> Self {
+        EdgeAttr { data }
+    }
+
+    pub fn get(&self, edge: EdgePtr<usize>) -> &T {
+        &self.data[edge]
+    }
+
+    pub fn get_range(&self, edge_range: Range<EdgePtr<usize>>) -> &[T] {
+        &self.data[edge_range]
+    }
+}
+
 
 pub struct EdgeIndexBuilder<Ix = DefaultIx, Ptr = DefaultPtr> {
     pub rows: Vec<NodeIdx<Ix>>,
