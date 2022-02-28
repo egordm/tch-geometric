@@ -1,4 +1,5 @@
 use pyo3::{PyErr};
+use pyo3::exceptions::PyValueError;
 use thiserror::Error;
 use tch::kind::Element;
 use tch::{Device, Kind, Tensor};
@@ -15,7 +16,7 @@ pub enum TensorConversionError {
 
 impl From<TensorConversionError> for PyErr {
     fn from(error: TensorConversionError) -> Self {
-        error.into()
+        PyValueError::new_err(error.to_string())
     }
 }
 
