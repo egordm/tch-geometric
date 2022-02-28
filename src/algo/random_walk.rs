@@ -39,6 +39,9 @@ pub fn random_walk(
 
         for l in 0..walk_length as usize {
             let neighbors = graph.neighbors_slice(cur);
+            if neighbors.is_empty() {
+                break;
+            }
 
             // TODO: move this logic to a walker state function
             // Neighbor sampling
@@ -105,7 +108,7 @@ mod tests {
 
             assert_eq!(walk[0], head);
             for (prev, curr) in walk.iter().zip(walk.iter().skip(1)) {
-                assert!(graph.has_edge(*curr, *prev));
+                assert!(graph.has_edge(*prev, *curr));
             }
         }
     }
