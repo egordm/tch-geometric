@@ -82,7 +82,7 @@ mod algo {
     use std::convert::TryInto;
     use pyo3::prelude::*;
     use tch::Tensor;
-    use crate::algo::neighbor_sampling::{UnweightedSampler, WeightedSampler};
+    use crate::algo::neighbor_sampling::{IdentityFilter, UnweightedSampler, WeightedSampler};
     use crate::data::{CscGraph, CsrGraph, EdgeAttr};
     use crate::utils::{EdgePtr, NodePtr, try_tensor_to_slice};
 
@@ -110,10 +110,10 @@ mod algo {
 
         let (samples, edge_index, layer_offsets) = match replace {
             true => crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
-                &mut rng, &graph, &UnweightedSampler::<true>, inputs_data, &num_neighbors
+                &mut rng, &graph, &UnweightedSampler::<true>, &IdentityFilter, inputs_data, &num_neighbors
             ),
             false => crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
-                &mut rng, &graph, &UnweightedSampler::<false>, inputs_data, &num_neighbors
+                &mut rng, &graph, &UnweightedSampler::<false>, &IdentityFilter, inputs_data, &num_neighbors
             ),
         };
 
@@ -158,7 +158,7 @@ mod algo {
         let inputs_data = try_tensor_to_slice::<i64>(&inputs)?;
 
         let (samples, edge_index, layer_offsets) = crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
-            &mut rng, &graph, &WeightedSampler::new(weights_attr), inputs_data, &num_neighbors,
+            &mut rng, &graph, &WeightedSampler::new(weights_attr), &IdentityFilter, inputs_data, &num_neighbors,
         );
 
         let samples = samples.try_into().expect("Can't convert vec into tensor");

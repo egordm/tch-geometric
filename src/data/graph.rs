@@ -81,6 +81,11 @@ impl<'a, Ty, Ptr: IndexType, Ix: IndexType> SparseGraph<'a, Ty, Ptr, Ix> {
         let neighbors = self.neighbors_slice(x);
         neighbors.binary_search(&y).is_ok()
     }
+    
+    pub fn find_edge(&self, x: NodeIdx<Ix>, y: NodeIdx<Ix>) -> Option<EdgePtr<usize>> {
+        let neighbors = self.neighbors_slice(x);
+        neighbors.binary_search(&y).ok()
+    }
 }
 
 impl<'a, Ptr: IndexType, Ix: IndexType> CscGraph<'a, Ptr, Ix> {
@@ -95,7 +100,7 @@ impl<'a, Ptr: IndexType, Ix: IndexType> CsrGraph<'a, Ptr, Ix> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EdgeAttr<'a, T> {
     pub data: &'a [T],
 }

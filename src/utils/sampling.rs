@@ -14,13 +14,13 @@ pub fn reservoir_sampling<T: Copy, I: Iterator<Item=T>>(
         n += 1;
     }
 
-    let i = n;
+    let mut i = n;
     for v in src {
         let j = rng.gen_range(0..i);
         if j < dst.len() {
             dst[j] = v;
         }
-        n += 1;
+        i += 1;
     }
     n
 }
