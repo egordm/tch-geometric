@@ -82,9 +82,69 @@ mod algo {
     use std::convert::TryInto;
     use pyo3::prelude::*;
     use tch::Tensor;
-    use crate::algo::neighbor_sampling::{IdentityFilter, UnweightedSampler, WeightedSampler};
-    use crate::data::{CscGraph, CsrGraph, EdgeAttr};
-    use crate::utils::{EdgePtr, NodePtr, try_tensor_to_slice};
+    use crate::algo::neighbor_sampling as ns;
+    use crate::data::{CscGraph, CsrGraph, EdgeAttr, EdgeIndexBuilder};
+    use crate::utils::{EdgePtr, NodeIdx, NodePtr, TensorResult, try_tensor_to_slice};
+
+    #[derive(FromPyObject)]
+    pub struct UniformSampler {
+        with_replacement: bool,
+    }
+
+    #[derive(FromPyObject)]
+    pub struct WeightedSampler {
+        weights: Tensor,
+    }
+
+    #[derive(FromPyObject)]
+    pub enum SamplerType {
+        Uniform(UniformSampler),
+        Weighted(WeightedSampler),
+    }
+
+    #[derive(FromPyObject)]
+    pub struct TemporalFilter {
+        window: (i64, i64),
+        timestamps: Tensor,
+        initial_state: Tensor,
+        forward: bool,
+        mode: usize,
+    }
+
+    impl TemporalFilter {
+        pub fn build<const FORWARD: bool, const MODE: usize>(&self)
+            -> TensorResult<ns::TemporalFilter<i64, FORWARD, MODE>> {
+            let timestamps_data = try_tensor_to_slice::<i64>(&self.timestamps)?;
+            let initial_timestamps_data = try_tensor_to_slice::<i64>(&self.initial_state)?;
+            let window = self.window.0..=self.window.1;
+
+            Ok(
+                ns::TemporalFilter::new(window, EdgeAttr::new(timestamps_data), initial_timestamps_data)
+            )
+        }
+    }
+
+    #[derive(FromPyObject)]
+    pub enum FilterType {
+        TemporalFilter(TemporalFilter),
+    }
+
+    macro_rules! match_mixed_return {
+        {
+            match ($m:expr) {
+                $($pattern:pat => $result:expr),*,
+            } ==> $ret:expr
+        } => {
+            match $m {
+                $(
+                    $pattern => {
+                        let result = $result;
+                        $ret(result)
+                    },
+                )*
+            }
+        }
+    }
 
     #[pyfunction]
     pub fn neighbor_sampling_homogenous(
@@ -92,7 +152,8 @@ mod algo {
         row_indices: Tensor,
         inputs: Tensor,
         num_neighbors: Vec<usize>,
-        replace: bool,
+        sampler: Option<SamplerType>,
+        filter: Option<FilterType>,
     ) -> PyResult<(
         Tensor,
         Tensor,
@@ -108,58 +169,42 @@ mod algo {
 
         let inputs_data = try_tensor_to_slice::<i64>(&inputs)?;
 
-        let (samples, edge_index, layer_offsets) = match replace {
-            true => crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
-                &mut rng, &graph, &UnweightedSampler::<true>, &IdentityFilter, inputs_data, &num_neighbors
-            ),
-            false => crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
-                &mut rng, &graph, &UnweightedSampler::<false>, &IdentityFilter, inputs_data, &num_neighbors
-            ),
-        };
-
-        let samples = samples.try_into().expect("Can't convert vec into tensor");
-        let rows = edge_index.rows.try_into().expect("Can't convert vec into tensor");
-        let cols = edge_index.cols.try_into().expect("Can't convert vec into tensor");
-        let edge_index = edge_index.edge_index.try_into().expect("Can't convert vec into tensor");
-
-        Ok((
-            samples,
-            rows,
-            cols,
-            edge_index,
-            layer_offsets,
-        ))
-    }
-
-    #[pyfunction]
-    pub fn neighbor_sampling_homogenous_weighted(
-        col_ptrs: Tensor,
-        row_indices: Tensor,
-        edge_weights: Tensor,
-        inputs: Tensor,
-        num_neighbors: Vec<usize>,
-    ) -> PyResult<(
-        Tensor,
-        Tensor,
-        Tensor,
-        Tensor,
-        Vec<(NodePtr, EdgePtr)>
-    )>
-    {
-        let mut rng = super::random::get();
-
-        let ptrs = try_tensor_to_slice::<i64>(&col_ptrs)?;
-        let indices = try_tensor_to_slice::<i64>(&row_indices)?;
-        let weights = try_tensor_to_slice::<f64>(&edge_weights)?;
-        let graph = CscGraph::new(ptrs, indices);
-        let weights_attr = EdgeAttr::new(&weights);
-
-
-        let inputs_data = try_tensor_to_slice::<i64>(&inputs)?;
-
-        let (samples, edge_index, layer_offsets) = crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
-            &mut rng, &graph, &WeightedSampler::new(weights_attr), &IdentityFilter, inputs_data, &num_neighbors,
-        );
+        let (samples, edge_index, layer_offsets) = match_mixed_return! {
+            match (sampler.as_ref()) {
+                Some(SamplerType::Uniform(UniformSampler { with_replacement: true })) => ns::UnweightedSampler::<true>,
+                Some(SamplerType::Uniform(UniformSampler { with_replacement: false })) => ns::UnweightedSampler::<false>,
+                Some(SamplerType::Weighted(WeightedSampler { weights })) => {
+                    let weights_data = try_tensor_to_slice::<f64>(&weights)?;
+                    ns::WeightedSampler::new(EdgeAttr::new(weights_data))
+                },
+                _ => ns::UnweightedSampler::<false>,
+            } ==> |sampler| {
+                match_mixed_return! {
+                    match (filter.as_ref()) {
+                        Some(FilterType::TemporalFilter(ft @ TemporalFilter {
+                            mode: ns::TEMPORAL_SAMPLE_STATIC, ..
+                        })) => ft.build::<true, {ns::TEMPORAL_SAMPLE_STATIC}>()?,
+                        Some(FilterType::TemporalFilter(ft @ TemporalFilter {
+                            forward: true, mode: ns::TEMPORAL_SAMPLE_RELATIVE, ..
+                        })) => ft.build::<true, {ns::TEMPORAL_SAMPLE_RELATIVE}>()?,
+                        Some(FilterType::TemporalFilter(ft @ TemporalFilter {
+                            forward: false, mode: ns::TEMPORAL_SAMPLE_RELATIVE, ..
+                        })) => ft.build::<false, {ns::TEMPORAL_SAMPLE_RELATIVE}>()?,
+                        Some(FilterType::TemporalFilter(ft @ TemporalFilter {
+                            forward: true, mode: ns::TEMPORAL_SAMPLE_DYNAMIC, ..
+                        })) => ft.build::<true, {ns::TEMPORAL_SAMPLE_DYNAMIC}>()?,
+                        Some(FilterType::TemporalFilter(ft @ TemporalFilter {
+                            forward: false, mode: ns::TEMPORAL_SAMPLE_DYNAMIC, ..
+                        })) => ft.build::<false, {ns::TEMPORAL_SAMPLE_DYNAMIC}>()?,
+                        _ => ns::IdentityFilter,
+                    } ==> |filter| {
+                        Ok(crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
+                            &mut rng, &graph, &sampler, &filter, inputs_data, &num_neighbors
+                        )) as TensorResult<(Vec<NodeIdx>, EdgeIndexBuilder, Vec<(NodePtr, EdgePtr)>)>
+                    }
+                }
+            }
+        }?;
 
         let samples = samples.try_into().expect("Can't convert vec into tensor");
         let rows = edge_index.rows.try_into().expect("Can't convert vec into tensor");
@@ -205,7 +250,6 @@ mod algo {
     pub fn module(py: Python, p: &PyModule) -> PyResult<()> {
         let m = PyModule::new(py, "algo")?;
         m.add_function(wrap_pyfunction!(neighbor_sampling_homogenous, m)?)?;
-        m.add_function(wrap_pyfunction!(neighbor_sampling_homogenous_weighted, m)?)?;
         m.add_function(wrap_pyfunction!(random_walk, m)?)?;
         p.add_submodule(m)?;
         Ok(())
