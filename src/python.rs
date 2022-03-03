@@ -37,35 +37,51 @@ mod random {
 
 mod data {
     use pyo3::prelude::*;
+    use std::convert::TryFrom;
     use tch::Tensor;
-    use crate::data::{CscGraphData, CsrGraphData};
+    use crate::data::{CooGraphData, CscGraphData, CsrGraphData};
+
+    #[derive(FromPyObject)]
+    pub enum GraphSize {
+        Square(i64),
+        Other(i64, i64),
+    }
+
+    impl GraphSize {
+        pub fn to_tuple(&self) -> (i64, i64) {
+            match self {
+                GraphSize::Square(n) => (*n, *n),
+                GraphSize::Other(m, n) => (*m, *n),
+            }
+        }
+    }
 
     #[pyfunction]
     pub fn to_csc(
-        edge_index: Tensor,
-        m: i64,
-    ) -> (Tensor, Tensor, Tensor) {
+        row_col: Tensor,
+        size: GraphSize,
+    ) -> PyResult<(Tensor, Tensor, Tensor)> {
+        let size = size.to_tuple();
+        let coo_graph = CooGraphData::new(row_col, size);
         let CscGraphData {
             ptrs, indices, perm, ..
-        } = CscGraphData::try_from_edge_index(&edge_index, m).unwrap();
+        } = CscGraphData::try_from(&coo_graph)?;
 
-        (
-            ptrs, indices, perm
-        )
+        Ok((ptrs, indices, perm))
     }
 
     #[pyfunction]
     pub fn to_csr(
-        edge_index: Tensor,
-        m: i64,
-    ) -> (Tensor, Tensor, Tensor) {
+        row_col: Tensor,
+        size: GraphSize,
+    ) -> PyResult<(Tensor, Tensor, Tensor)> {
+        let size = size.to_tuple();
+        let coo_graph = CooGraphData::new(row_col, size);
         let CsrGraphData {
             ptrs, indices, perm, ..
-        } = CsrGraphData::try_from_edge_index(&edge_index, m).unwrap();
+        } = CsrGraphData::try_from(&coo_graph)?;
 
-        (
-            ptrs, indices, perm
-        )
+        Ok((ptrs, indices, perm))
     }
 
 
@@ -159,7 +175,7 @@ mod algo {
         Tensor,
         Tensor,
         Tensor,
-        Vec<(NodePtr, EdgePtr)>
+        Vec<(NodePtr, EdgePtr, NodePtr)>
     )> {
         let mut rng = super::random::get();
 
@@ -200,7 +216,7 @@ mod algo {
                     } ==> |filter| {
                         Ok(crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
                             &mut rng, &graph, &sampler, &filter, inputs_data, &num_neighbors
-                        )) as TensorResult<(Vec<NodeIdx>, CooGraphBuilder, Vec<(NodePtr, EdgePtr)>)>
+                        )) as TensorResult<(Vec<NodeIdx>, CooGraphBuilder, Vec<(NodePtr, EdgePtr, NodePtr)>)>
                     }
                 }
             }
