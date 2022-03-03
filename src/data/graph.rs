@@ -120,15 +120,15 @@ impl<'a, T> EdgeAttr<'a, T> {
 }
 
 
-pub struct EdgeIndexBuilder<Ix = DefaultIx, Ptr = DefaultPtr> {
+pub struct CooGraphBuilder<Ix = DefaultIx, Ptr = DefaultPtr> {
     pub rows: Vec<NodeIdx<Ix>>,
     pub cols: Vec<NodeIdx<Ix>>,
     pub edge_index: Vec<EdgeIdx<Ptr>>,
 }
 
-impl<Ix: IndexType + Element, Ptr: IndexType + Element> EdgeIndexBuilder<Ix, Ptr> {
+impl<Ix: IndexType + Element, Ptr: IndexType + Element> CooGraphBuilder<Ix, Ptr> {
     pub fn new() -> Self {
-        EdgeIndexBuilder {
+        CooGraphBuilder {
             cols: Vec::new(),
             rows: Vec::new(),
             edge_index: Vec::new(),

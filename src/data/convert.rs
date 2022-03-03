@@ -43,6 +43,29 @@ pub fn ind2ptr(
     Ok(out)
 }
 
+pub struct CooGraphData {
+    pub row_col: Tensor,
+    pub size: (i64, i64),
+}
+
+impl CooGraphData {
+    pub fn new(row_col: Tensor, size: (i64, i64)) -> Self {
+        Self {
+            row_col,
+            size,
+        }
+    }
+
+    pub fn row(&self) -> Tensor {
+        self.row_col.select(0, 0)
+    }
+
+    pub fn col(&self) -> Tensor {
+        self.row_col.select(0, 1)
+    }
+}
+
+
 pub struct SparseGraphData<Ty> {
     pub ptrs: Tensor,
     pub indices: Tensor,
@@ -58,8 +81,8 @@ impl<Ty> SparseGraphData<Ty> {
         ptrs: Tensor,
         indices: Tensor,
         perm: Tensor,
-    ) -> SparseGraphData<Ty> {
-        SparseGraphData {
+    ) -> Self {
+        Self {
             ptrs,
             indices,
             perm,
@@ -67,6 +90,33 @@ impl<Ty> SparseGraphData<Ty> {
         }
     }
 }
+
+impl<Ty: SparseGraphTypeTrait> TryFrom<&CooGraphData> for SparseGraphData<Ty> {
+    type Error = TensorConversionError;
+
+    fn try_from(value: &CooGraphData) -> Result<Self, Self::Error> {
+        let (row, col) = (value.row(), value.col());
+        let size = value.size;
+
+        match Ty::get_type() {
+            SparseGraphType::Csr => {
+                let perm = (&row * size.1).add(&col).argsort(0, false);
+                let row_ptrs = ind2ptr(&row.i(&perm), size.0)?;
+                let col_indices = col.i(&perm);
+
+                Ok(Self::new(row_ptrs, col_indices, perm))
+            }
+            SparseGraphType::Csc => {
+                let perm = (&col * size.0).add(&row).argsort(0, false);
+                let col_ptrs = ind2ptr(&col.i(&perm), size.1)?;
+                let row_indices = row.i(&perm);
+
+                Ok(Self::new(col_ptrs, row_indices, perm))
+            }
+        }
+    }
+}
+
 
 impl<Ty: SparseGraphTypeTrait> SparseGraphData<Ty> {
     pub fn try_from_edge_index(

@@ -7,7 +7,7 @@ use num_traits::Float;
 use rand::{Rng};
 use rand::distributions::uniform::SampleUniform;
 use crate::data::EdgeAttr;
-use crate::data::graph::{CscGraph, EdgeIndexBuilder};
+use crate::data::graph::{CscGraph, CooGraphBuilder};
 use crate::utils::{EdgePtr, EdgeType, NodeType, RelType, replacement_sampling, reservoir_sampling, reservoir_sampling_weighted};
 use crate::utils::types::{NodeIdx, NodePtr};
 
@@ -182,7 +182,7 @@ pub fn neighbor_sampling_homogenous<
     num_neighbors: &[usize],
 ) -> (
     Vec<NodeIdx>,
-    EdgeIndexBuilder,
+    CooGraphBuilder,
     Vec<(NodePtr, EdgePtr, NodePtr)>
 ) {
     // Initialize some data structures for the sampling process
@@ -190,7 +190,7 @@ pub fn neighbor_sampling_homogenous<
     let mut states: Vec<F::State> = Vec::new();
 
     let mut layer_offsets: Vec<(NodePtr, EdgePtr, NodePtr)> = Vec::new();
-    let mut edge_index = EdgeIndexBuilder::new();
+    let mut edge_index = CooGraphBuilder::new();
 
     samples.extend_from_slice(inputs);
     filter.init(&samples, &mut states);
@@ -256,7 +256,7 @@ pub fn neighbor_sampling_heterogenous<
     inputs_state: &HashMap<NodeType, &[F::State]>,
 ) -> (
     HashMap<NodeType, Vec<NodeIdx>>,
-    HashMap<RelType, EdgeIndexBuilder>,
+    HashMap<RelType, CooGraphBuilder>,
     HashMap<RelType, Vec<(NodePtr, EdgePtr, NodePtr)>>,
 ) {
     // Create a mapping to convert single string relations to edge type triplets:
@@ -284,8 +284,8 @@ pub fn neighbor_sampling_heterogenous<
     let mut layer_offsets: HashMap<RelType, Vec<(NodePtr, EdgePtr, NodePtr)>> = graphs.keys()
         .map(|rel_type| (rel_type.clone(), Vec::new()))
         .collect();
-    let mut edge_index: HashMap<RelType, EdgeIndexBuilder> = graphs.keys()
-        .map(|rel_type| (rel_type.clone(), EdgeIndexBuilder::new()))
+    let mut edge_index: HashMap<RelType, CooGraphBuilder> = graphs.keys()
+        .map(|rel_type| (rel_type.clone(), CooGraphBuilder::new()))
         .collect();
 
     // Maintains begin/end indices for each node type
@@ -366,21 +366,21 @@ mod tests {
     use std::convert::TryFrom;
     use rand::{Rng, SeedableRng};
     use crate::algo::neighbor_sampling::{IdentityFilter, SamplingFilter, TemporalFilter, UnweightedSampler, WeightedSampler};
-    use crate::data::{CscGraph, CscGraphData, EdgeAttr, EdgeIndexBuilder};
+    use crate::data::{CscGraph, CscGraphData, EdgeAttr, CooGraphBuilder};
     use crate::data::tests::{load_fake_hetero_graph, load_karate_graph};
     use crate::utils::{EdgePtr, EdgeType, NodeIdx, NodePtr, NodeType, RelType};
     use super::{TEMPORAL_SAMPLE_STATIC, TEMPORAL_SAMPLE_RELATIVE};
 
     pub fn validate_neighbor_samples(
         graph: &CscGraph<i64, i64>,
-        edge_index: &EdgeIndexBuilder,
+        coo_builder: &CooGraphBuilder,
         samples_src: &[NodeIdx],
         samples_dst: &[NodeIdx],
         layer_offsets: &[(NodePtr, EdgePtr, NodePtr)],
         num_neighbors: &[usize],
     ) {
         // Validate whether all edges are valid
-        for (j, i) in edge_index.rows.iter().zip(edge_index.cols.iter()) {
+        for (j, i) in coo_builder.rows.iter().zip(coo_builder.cols.iter()) {
             let v = samples_src[*j as usize];
             let w = samples_dst[*i as usize];
             // Query for dst <- src edge because we are operating on csc graph
@@ -389,7 +389,7 @@ mod tests {
 
         // Validate whether none of the nodes exceed the sampled number of neighbors
         let mut counts = vec![0_usize; samples_dst.len()];
-        for (j, i) in edge_index.rows.iter().zip(edge_index.cols.iter()) {
+        for (j, i) in coo_builder.rows.iter().zip(coo_builder.cols.iter()) {
             counts[*i as usize] += 1;
         }
 
@@ -405,16 +405,16 @@ mod tests {
     }
 
     pub fn samples_to_paths(
-        edge_index: &EdgeIndexBuilder,
+        coo_builder: &CooGraphBuilder,
         samples: &[NodeIdx],
         inputs: &[NodeIdx],
     ) -> Vec<(Vec<NodeIdx>, Vec<usize>)> {
         let mut paths = inputs.iter().map(|&i| (vec![i], vec![])).collect::<VecDeque<_>>();
         let mut head = vec![-1];
         let mut head_edges = vec![];
-        for ((j, i), edge_idx) in edge_index.rows.iter()
-            .zip(edge_index.cols.iter())
-            .zip(0..edge_index.edge_index.len())
+        for ((j, i), edge_idx) in coo_builder.rows.iter()
+            .zip(coo_builder.cols.iter())
+            .zip(0..coo_builder.edge_index.len())
         {
             let v = samples[*j as usize];
             let w = samples[*i as usize];
@@ -440,18 +440,18 @@ mod tests {
 
     #[test]
     pub fn test_neighbor_sampling_homogenous() {
-        let (x, _, edge_index) = load_karate_graph();
+        let (x, _, coo_graph) = load_karate_graph();
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
         let node_count = x.size()[0];
-        let graph_data = CscGraphData::try_from_edge_index(&edge_index, (node_count, node_count)).unwrap();
+        let graph_data = CscGraphData::try_from(&coo_graph).unwrap();
         let graph = CscGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
         let inputs = vec![0_i64, 1, 4, 5];
         let num_neighbors = vec![4, 3];
 
-        let (samples, edge_index, layer_offsets) = super::neighbor_sampling_homogenous(
+        let (samples, coo_builder, layer_offsets) = super::neighbor_sampling_homogenous(
             &mut rng,
             &graph,
             &UnweightedSampler::<true>,
@@ -461,18 +461,18 @@ mod tests {
         );
 
         validate_neighbor_samples(
-            &graph, &edge_index, &samples, &samples, &layer_offsets, &num_neighbors
+            &graph, &coo_builder, &samples, &samples, &layer_offsets, &num_neighbors
         );
     }
 
     #[test]
     pub fn test_neighbor_sampling_homogenous_weighted() {
-        let (x, _, edge_index) = load_karate_graph();
+        let (x, _, coo_graph) = load_karate_graph();
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
         let node_count = x.size()[0];
-        let graph_data = CscGraphData::try_from_edge_index(&edge_index, (node_count, node_count)).unwrap();
+        let graph_data = CscGraphData::try_from(&coo_graph).unwrap();
         let graph = CscGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
         let weights_data = (0..graph.edge_count()).map(|_| rng.gen_range(0.2..5.0)).collect::<Vec<f64>>();
@@ -481,7 +481,7 @@ mod tests {
         let inputs = vec![0_i64, 1, 4, 5];
         let num_neighbors = vec![4, 3];
 
-        let (samples, edge_index, layer_offsets) = super::neighbor_sampling_homogenous(
+        let (samples, coo_builder, layer_offsets) = super::neighbor_sampling_homogenous(
             &mut rng,
             &graph,
             &WeightedSampler::new(weights),
@@ -491,18 +491,18 @@ mod tests {
         );
 
         validate_neighbor_samples(
-            &graph, &edge_index, &samples, &samples, &layer_offsets, &num_neighbors
+            &graph, &coo_builder, &samples, &samples, &layer_offsets, &num_neighbors
         );
     }
 
     #[test]
     pub fn test_neighbor_sampling_homogenous_temporal() {
-        let (x, _, edge_index) = load_karate_graph();
+        let (x, _, coo_graph) = load_karate_graph();
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
         let node_count = x.size()[0];
-        let graph_data = CscGraphData::try_from_edge_index(&edge_index, (node_count, node_count)).unwrap();
+        let graph_data = CscGraphData::try_from(&coo_graph).unwrap();
         let graph = CscGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
         let timestamps_data = (0..graph.edge_count()).map(|_| rng.gen_range(0..4)).collect::<Vec<i64>>();
@@ -516,7 +516,7 @@ mod tests {
         let filter = TemporalFilter::<i64, false, TEMPORAL_SAMPLE_STATIC>::new(
             0..=2, timestamps.clone(), &input_timestamps,
         );
-        let (samples, edge_index, layer_offsets) = super::neighbor_sampling_homogenous(
+        let (samples, coo_builder, layer_offsets) = super::neighbor_sampling_homogenous(
             &mut rng,
             &graph,
             &UnweightedSampler::<false>,
@@ -526,12 +526,12 @@ mod tests {
         );
 
         validate_neighbor_samples(
-            &graph, &edge_index, &samples, &samples, &layer_offsets, &num_neighbors
+            &graph, &coo_builder, &samples, &samples, &layer_offsets, &num_neighbors
         );
-        let paths = samples_to_paths(&edge_index, &samples, &inputs);
+        let paths = samples_to_paths(&coo_builder, &samples, &inputs);
         for (_path, edges) in paths {
             for edge_idx in edges {
-                let edge_ptr = edge_index.edge_index[edge_idx];
+                let edge_ptr = coo_builder.edge_index[edge_idx];
                 let t = timestamps.get(edge_ptr as usize);
                 assert!((0..=2).contains(t));
             }
@@ -541,7 +541,7 @@ mod tests {
         let filter = TemporalFilter::<i64, false, TEMPORAL_SAMPLE_RELATIVE>::new(
             0..=2, timestamps.clone(), &input_timestamps,
         );
-        let (samples, edge_index, layer_offsets) = super::neighbor_sampling_homogenous(
+        let (samples, coo_builder, layer_offsets) = super::neighbor_sampling_homogenous(
             &mut rng,
             &graph,
             &UnweightedSampler::<false>,
@@ -551,16 +551,16 @@ mod tests {
         );
 
         validate_neighbor_samples(
-            &graph, &edge_index, &samples, &samples, &layer_offsets, &num_neighbors
+            &graph, &coo_builder, &samples, &samples, &layer_offsets, &num_neighbors
         );
-        let paths = samples_to_paths(&edge_index, &samples, &inputs);
+        let paths = samples_to_paths(&coo_builder, &samples, &inputs);
         for (_path, edges) in paths {
             if let Some(edge_idx) = edges.first().cloned() {
-                let to_idx = edge_index.cols[edge_idx];
+                let to_idx = coo_builder.cols[edge_idx];
                 let start_t = input_timestamps[to_idx as usize];
 
                 for edge_idx in edges {
-                    let edge_ptr = edge_index.edge_index[edge_idx];
+                    let edge_ptr = coo_builder.edge_index[edge_idx];
                     let t = *timestamps.get(edge_ptr as usize);
 
                     assert!(((start_t - 2)..=start_t).contains(&t));
@@ -571,21 +571,20 @@ mod tests {
 
     #[test]
     pub fn test_neighbor_sampling_heterogenous() {
-        let (xs, edge_indexes) = load_fake_hetero_graph();
+        let (xs, coo_graphs) = load_fake_hetero_graph();
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
         let node_types: Vec<NodeType> = xs.keys().cloned().collect();
-        let edge_types: Vec<EdgeType> = edge_indexes.keys().cloned().collect();
+        let edge_types: Vec<EdgeType> = coo_graphs.keys().cloned().collect();
 
         let mut to_edge_types = HashMap::<RelType, EdgeType>::new();
         for e @ (src_node_type, rel_type, dst_node_type) in edge_types.iter() {
             to_edge_types.insert(format!("{}__{}__{}", src_node_type, rel_type, dst_node_type), e.clone());
         }
 
-        let graph_data: HashMap<RelType, CscGraphData> = edge_indexes.iter().map(|((src, rel, dst), edge_index)| {
-            let size = (xs[src].size()[0], xs[dst].size()[0]);
-            let graph_data = CscGraphData::try_from_edge_index(&edge_index, size).unwrap();
+        let graph_data: HashMap<RelType, CscGraphData> = coo_graphs.iter().map(|((src, rel, dst), coo_graph)| {
+            let graph_data = CscGraphData::try_from(coo_graph).unwrap();
             (format!("{}__{}__{}", src, rel, dst), graph_data)
         }).collect();
         let graphs: HashMap<RelType, CscGraph> = graph_data.iter().map(|(rel_type, graph_data)| {
@@ -621,7 +620,7 @@ mod tests {
             (rel_type, IdentityFilter)
         }).collect();
 
-        let (samples, edge_index, layer_offsets) = super::neighbor_sampling_heterogenous(
+        let (samples, coo_builders, layer_offsets) = super::neighbor_sampling_heterogenous(
             &mut rng,
             &node_types,
             &edge_types,
@@ -634,12 +633,12 @@ mod tests {
             &inputs_state,
         );
 
-        for rel_type in edge_index.keys() {
+        for rel_type in coo_builders.keys() {
             let (src_node_type, _, dst_node_type) = &to_edge_types[rel_type];
 
             validate_neighbor_samples(
                 &graphs[rel_type],
-                &edge_index[rel_type],
+                &coo_builders[rel_type],
                 &samples[src_node_type],
                 &samples[dst_node_type],
                 &layer_offsets[rel_type],

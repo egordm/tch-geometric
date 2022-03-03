@@ -83,7 +83,7 @@ mod algo {
     use pyo3::prelude::*;
     use tch::Tensor;
     use crate::algo::neighbor_sampling as ns;
-    use crate::data::{CscGraph, CsrGraph, EdgeAttr, EdgeIndexBuilder};
+    use crate::data::{CscGraph, CsrGraph, EdgeAttr, CooGraphBuilder};
     use crate::utils::{EdgePtr, NodeIdx, NodePtr, TensorResult, try_tensor_to_slice};
 
     #[derive(FromPyObject)]
@@ -200,7 +200,7 @@ mod algo {
                     } ==> |filter| {
                         Ok(crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
                             &mut rng, &graph, &sampler, &filter, inputs_data, &num_neighbors
-                        )) as TensorResult<(Vec<NodeIdx>, EdgeIndexBuilder, Vec<(NodePtr, EdgePtr)>)>
+                        )) as TensorResult<(Vec<NodeIdx>, CooGraphBuilder, Vec<(NodePtr, EdgePtr)>)>
                     }
                 }
             }
