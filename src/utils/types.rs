@@ -8,6 +8,10 @@ pub type NodePtr<Ix = DefaultIx> = Ix;
 pub type EdgeIdx<Ix = DefaultIx> = Ix;
 pub type EdgePtr<Ix = DefaultIx> = Ix;
 
+pub type NodeType = String;
+pub type RelType = String;
+pub type EdgeType = (NodeType, RelType, NodeType);
+
 pub unsafe trait IndexType: Copy + Default + Hash + Ord + fmt::Debug + 'static {
     fn new(x: usize) -> Self;
     fn index(&self) -> usize;

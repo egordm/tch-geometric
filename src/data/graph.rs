@@ -1,7 +1,7 @@
 use std::ops::Range;
 use tch::kind::Element;
 use tch::Tensor;
-use crate::utils::EdgePtr;
+use crate::utils::{EdgeIdx, EdgePtr};
 use crate::utils::types::{DefaultIx, DefaultPtr, IndexType, NodeIdx, NodePtr};
 
 #[derive(Debug, Clone, Copy)]
@@ -123,7 +123,7 @@ impl<'a, T> EdgeAttr<'a, T> {
 pub struct EdgeIndexBuilder<Ix = DefaultIx, Ptr = DefaultPtr> {
     pub rows: Vec<NodeIdx<Ix>>,
     pub cols: Vec<NodeIdx<Ix>>,
-    pub edge_index: Vec<NodePtr<Ptr>>,
+    pub edge_index: Vec<EdgeIdx<Ptr>>,
 }
 
 impl<Ix: IndexType + Element, Ptr: IndexType + Element> EdgeIndexBuilder<Ix, Ptr> {

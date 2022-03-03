@@ -174,7 +174,7 @@ mod algo {
                 Some(SamplerType::Uniform(UniformSampler { with_replacement: true })) => ns::UnweightedSampler::<true>,
                 Some(SamplerType::Uniform(UniformSampler { with_replacement: false })) => ns::UnweightedSampler::<false>,
                 Some(SamplerType::Weighted(WeightedSampler { weights })) => {
-                    let weights_data = try_tensor_to_slice::<f64>(&weights)?;
+                    let weights_data = try_tensor_to_slice::<f64>(weights)?;
                     ns::WeightedSampler::new(EdgeAttr::new(weights_data))
                 },
                 _ => ns::UnweightedSampler::<false>,
