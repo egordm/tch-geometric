@@ -87,7 +87,8 @@ mod tests {
 
         let (x, _, edge_index) = load_karate_graph();
 
-        let graph_data = CsrGraphData::try_from_edge_index(&edge_index, x.size()[0]).unwrap();
+        let node_count = x.size()[0];
+        let graph_data = CsrGraphData::try_from_edge_index(&edge_index, (node_count, node_count)).unwrap();
         let graph = CsrGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
         let start = Tensor::of_slice(&[0_i64, 1, 2, 3]);

@@ -71,22 +71,22 @@ impl<Ty> SparseGraphData<Ty> {
 impl<Ty: SparseGraphTypeTrait> SparseGraphData<Ty> {
     pub fn try_from_edge_index(
         edge_index: &Tensor,
-        node_count: i64,
+        size: (i64, i64),
     ) -> TensorResult<Self> {
         let row = edge_index.select(0, 0);
         let col = edge_index.select(0, 1);
 
         match Ty::get_type() {
             SparseGraphType::Csr => {
-                let perm = (&row * node_count).add(&col).argsort(0, false);
-                let row_ptrs = ind2ptr(&row.i(&perm), node_count)?;
+                let perm = (&row * size.1).add(&col).argsort(0, false);
+                let row_ptrs = ind2ptr(&row.i(&perm), size.0)?;
                 let col_indices = col.i(&perm);
 
                 Ok(Self::new(row_ptrs, col_indices, perm))
             }
             SparseGraphType::Csc => {
-                let perm = (&col * node_count).add(&row).argsort(0, false);
-                let col_ptrs = ind2ptr(&col.i(&perm), node_count)?;
+                let perm = (&col * size.0).add(&row).argsort(0, false);
+                let col_ptrs = ind2ptr(&col.i(&perm), size.1)?;
                 let row_indices = row.i(&perm);
 
                 Ok(Self::new(col_ptrs, row_indices, perm))
@@ -194,7 +194,7 @@ mod tests {
         let edge_index = Tensor::try_from(edge_index_data).unwrap();
 
 
-        let result = CscGraphData::try_from_edge_index(&edge_index, m).unwrap();
+        let result = CscGraphData::try_from_edge_index(&edge_index, (m, m)).unwrap();
         let graph: CscGraph<i64, i64> = (&result).try_into().unwrap();
 
         assert_eq!(graph.in_degree(0), 3);
