@@ -14,8 +14,6 @@ use crate::utils::types::{NodeIdx, NodePtr};
 pub trait SamplingFilter {
     type State: Copy;
 
-    fn init(&self, samples: &[NodeIdx], s: &mut Vec<Self::State>);
-
     fn filter(&self, state: &Self::State, src: NodeIdx, dst: EdgePtr<usize>) -> bool;
 
     fn mutate(&self, state: &Self::State, src: NodeIdx, dst: EdgePtr<usize>) -> Self::State;
@@ -25,10 +23,6 @@ pub struct IdentityFilter;
 
 impl SamplingFilter for IdentityFilter {
     type State = ();
-
-    fn init(&self, samples: &[NodeIdx], s: &mut Vec<Self::State>) {
-        s.resize(samples.len(), ());
-    }
 
     fn filter(&self, state: &Self::State, src: NodeIdx, dst: EdgePtr<usize>) -> bool { true }
 
@@ -42,17 +36,13 @@ pub const TEMPORAL_SAMPLE_DYNAMIC: usize = 2;
 pub struct TemporalFilter<'a, T, const FORWARD: bool, const MODE: usize> {
     window: RangeInclusive<T>,
     timestamps: EdgeAttr<'a, T>,
-    initial_state: &'a [T],
 }
 
-impl<
-    'a, T, const FORWARD: bool, const MODE: usize
-> TemporalFilter<'a, T, FORWARD, MODE> {
-    pub fn new(window: RangeInclusive<T>, timestamps: EdgeAttr<'a, T>, initial_state: &'a [T]) -> Self {
+impl<'a, T, const FORWARD: bool, const MODE: usize> TemporalFilter<'a, T, FORWARD, MODE> {
+    pub fn new(window: RangeInclusive<T>, timestamps: EdgeAttr<'a, T>) -> Self {
         TemporalFilter {
             window,
             timestamps,
-            initial_state,
         }
     }
 }
@@ -61,10 +51,6 @@ impl<
     'a, T: Copy + PartialOrd + Neg<Output=T> + Sub<Output=T>, const FORWARD: bool, const MODE: usize
 > SamplingFilter for TemporalFilter<'a, T, FORWARD, MODE> {
     type State = T;
-
-    fn init(&self, _samples: &[NodeIdx], s: &mut Vec<Self::State>) {
-        s.extend_from_slice(self.initial_state);
-    }
 
     fn filter(&self, state: &Self::State, _src: NodeIdx, dst: EdgePtr<usize>) -> bool {
         let t = self.timestamps.get(dst);
@@ -171,29 +157,32 @@ impl<'w, W: Float + SampleUniform> Sampler for WeightedSampler<'w, W> {
     }
 }
 
+pub type LayerOffset = (NodePtr, EdgePtr, NodePtr);
+
 pub fn neighbor_sampling_homogenous<
     F: SamplingFilter
 >(
     rng: &mut impl Rng,
     graph: &CscGraph,
-    sampler: &impl Sampler,
-    filter: &F,
     inputs: &[NodeIdx],
     num_neighbors: &[usize],
+    sampler: &impl Sampler,
+    filter: &F,
+    inputs_state: &[F::State],
 ) -> (
     Vec<NodeIdx>,
     CooGraphBuilder,
-    Vec<(NodePtr, EdgePtr, NodePtr)>
+    Vec<LayerOffset>
 ) {
     // Initialize some data structures for the sampling process
     let mut samples: Vec<NodeIdx> = Vec::new();
     let mut states: Vec<F::State> = Vec::new();
 
-    let mut layer_offsets: Vec<(NodePtr, EdgePtr, NodePtr)> = Vec::new();
+    let mut layer_offsets: Vec<LayerOffset> = Vec::new();
     let mut edge_index = CooGraphBuilder::new();
 
     samples.extend_from_slice(inputs);
-    filter.init(&samples, &mut states);
+    states.extend_from_slice(inputs_state);
 
     let (mut begin, mut end) = (0, samples.len());
     for num_samples in num_neighbors.iter().cloned() {
@@ -257,7 +246,7 @@ pub fn neighbor_sampling_heterogenous<
 ) -> (
     HashMap<NodeType, Vec<NodeIdx>>,
     HashMap<RelType, CooGraphBuilder>,
-    HashMap<RelType, Vec<(NodePtr, EdgePtr, NodePtr)>>,
+    HashMap<RelType, Vec<LayerOffset>>,
 ) {
     // Create a mapping to convert single string relations to edge type triplets:
     let mut to_edge_types = HashMap::<RelType, EdgeType>::new();
@@ -281,7 +270,7 @@ pub fn neighbor_sampling_heterogenous<
             .extend_from_slice(inputs_state[node_type]);
     }
 
-    let mut layer_offsets: HashMap<RelType, Vec<(NodePtr, EdgePtr, NodePtr)>> = graphs.keys()
+    let mut layer_offsets: HashMap<RelType, Vec<LayerOffset>> = graphs.keys()
         .map(|rel_type| (rel_type.clone(), Vec::new()))
         .collect();
     let mut edge_index: HashMap<RelType, CooGraphBuilder> = graphs.keys()
@@ -365,10 +354,10 @@ mod tests {
     use std::collections::{HashMap, VecDeque};
     use std::convert::TryFrom;
     use rand::{Rng, SeedableRng};
-    use crate::algo::neighbor_sampling::{IdentityFilter, SamplingFilter, TemporalFilter, UnweightedSampler, WeightedSampler};
+    use crate::algo::neighbor_sampling::{IdentityFilter, LayerOffset, SamplingFilter, TemporalFilter, UnweightedSampler, WeightedSampler};
     use crate::data::{CscGraph, CscGraphData, EdgeAttr, CooGraphBuilder};
     use crate::data::tests::{load_fake_hetero_graph, load_karate_graph};
-    use crate::utils::{EdgePtr, EdgeType, NodeIdx, NodePtr, NodeType, RelType};
+    use crate::utils::{EdgeType, NodeIdx, NodePtr, NodeType, RelType};
     use super::{TEMPORAL_SAMPLE_STATIC, TEMPORAL_SAMPLE_RELATIVE};
 
     pub fn validate_neighbor_samples(
@@ -376,7 +365,7 @@ mod tests {
         coo_builder: &CooGraphBuilder,
         samples_src: &[NodeIdx],
         samples_dst: &[NodeIdx],
-        layer_offsets: &[(NodePtr, EdgePtr, NodePtr)],
+        layer_offsets: &[LayerOffset],
         num_neighbors: &[usize],
     ) {
         // Validate whether all edges are valid
@@ -449,15 +438,18 @@ mod tests {
         let graph = CscGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
         let inputs = vec![0_i64, 1, 4, 5];
+        let inputs_state = vec![(); inputs.len()];
+
         let num_neighbors = vec![4, 3];
 
         let (samples, coo_builder, layer_offsets) = super::neighbor_sampling_homogenous(
             &mut rng,
             &graph,
-            &UnweightedSampler::<true>,
-            &IdentityFilter,
             &inputs,
             &num_neighbors,
+            &UnweightedSampler::<true>,
+            &IdentityFilter,
+            &inputs_state,
         );
 
         validate_neighbor_samples(
@@ -479,15 +471,17 @@ mod tests {
         let weights = EdgeAttr::new(&weights_data);
 
         let inputs = vec![0_i64, 1, 4, 5];
+        let inputs_state = vec![(); inputs.len()];
         let num_neighbors = vec![4, 3];
 
         let (samples, coo_builder, layer_offsets) = super::neighbor_sampling_homogenous(
             &mut rng,
             &graph,
-            &WeightedSampler::new(weights),
-            &IdentityFilter,
             &inputs,
             &num_neighbors,
+            &WeightedSampler::new(weights),
+            &IdentityFilter,
+            &inputs_state,
         );
 
         validate_neighbor_samples(
@@ -514,15 +508,16 @@ mod tests {
 
         // Tests static window sampling
         let filter = TemporalFilter::<i64, false, TEMPORAL_SAMPLE_STATIC>::new(
-            0..=2, timestamps.clone(), &input_timestamps,
+            0..=2, timestamps.clone(),
         );
         let (samples, coo_builder, layer_offsets) = super::neighbor_sampling_homogenous(
             &mut rng,
             &graph,
-            &UnweightedSampler::<false>,
-            &filter,
             &inputs,
             &num_neighbors,
+            &UnweightedSampler::<false>,
+            &filter,
+            &input_timestamps,
         );
 
         validate_neighbor_samples(
@@ -539,15 +534,16 @@ mod tests {
 
         // Tests relative window sampling backward in time
         let filter = TemporalFilter::<i64, false, TEMPORAL_SAMPLE_RELATIVE>::new(
-            0..=2, timestamps.clone(), &input_timestamps,
+            0..=2, timestamps.clone(),
         );
         let (samples, coo_builder, layer_offsets) = super::neighbor_sampling_homogenous(
             &mut rng,
             &graph,
-            &UnweightedSampler::<false>,
-            &filter,
             &inputs,
             &num_neighbors,
+            &UnweightedSampler::<false>,
+            &filter,
+            &input_timestamps,
         );
 
         validate_neighbor_samples(

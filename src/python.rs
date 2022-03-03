@@ -128,15 +128,17 @@ mod algo {
     }
 
     impl TemporalFilter {
-        pub fn build<const FORWARD: bool, const MODE: usize>(&self)
-            -> TensorResult<ns::TemporalFilter<i64, FORWARD, MODE>> {
+        pub fn build<
+            const FORWARD: bool, const MODE: usize
+        >(&self) -> TensorResult<(ns::TemporalFilter<i64, FORWARD, MODE>, &[i64])> {
             let timestamps_data = try_tensor_to_slice::<i64>(&self.timestamps)?;
-            let initial_timestamps_data = try_tensor_to_slice::<i64>(&self.initial_state)?;
+            let initial_state_data = try_tensor_to_slice::<i64>(&self.initial_state)?;
             let window = self.window.0..=self.window.1;
 
-            Ok(
-                ns::TemporalFilter::new(window, EdgeAttr::new(timestamps_data), initial_timestamps_data)
-            )
+            Ok((
+                ns::TemporalFilter::new(window, EdgeAttr::new(timestamps_data)),
+                initial_state_data,
+            ))
         }
     }
 
@@ -212,11 +214,11 @@ mod algo {
                         Some(FilterType::TemporalFilter(ft @ TemporalFilter {
                             forward: false, mode: ns::TEMPORAL_SAMPLE_DYNAMIC, ..
                         })) => ft.build::<false, {ns::TEMPORAL_SAMPLE_DYNAMIC}>()?,
-                        _ => ns::IdentityFilter,
-                    } ==> |filter| {
+                        _ => (ns::IdentityFilter, &vec![(); inputs_data.len()][..]),
+                    } ==> |(filter, inputs_state)| {
                         Ok(crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
-                            &mut rng, &graph, &sampler, &filter, inputs_data, &num_neighbors
-                        )) as TensorResult<(Vec<NodeIdx>, CooGraphBuilder, Vec<(NodePtr, EdgePtr, NodePtr)>)>
+                            &mut rng, &graph, inputs_data, &num_neighbors, &sampler, &filter, inputs_state,
+                        )) as TensorResult<(Vec<NodeIdx>, CooGraphBuilder, Vec<ns::LayerOffset>)>
                     }
                 }
             }
