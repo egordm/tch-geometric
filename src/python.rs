@@ -95,12 +95,45 @@ mod data {
 }
 
 mod algo {
+    use std::collections::HashMap;
     use std::convert::TryInto;
+    use num_traits::Float;
     use pyo3::prelude::*;
+    use rand::distributions::uniform::SampleUniform;
+    use tch::kind::Element;
     use tch::Tensor;
     use crate::algo::neighbor_sampling as ns;
+    use crate::algo::neighbor_sampling::LayerOffset;
     use crate::data::{CscGraph, CsrGraph, EdgeAttr, CooGraphBuilder};
-    use crate::utils::{EdgePtr, NodeIdx, NodePtr, TensorResult, try_tensor_to_slice};
+    use crate::utils::{hashmap_from, EdgeType, NodeIdx, NodeType, RelType, TensorConversionError, TensorResult, try_tensor_to_slice};
+
+    #[derive(FromPyObject)]
+    pub enum MixedData {
+        Homogenous(Tensor),
+        Heterogenous(HashMap<String, Tensor>),
+    }
+
+    impl MixedData {
+        pub fn build_homogenous<T: Element>(&self) -> TensorResult<&[T]> {
+            if let MixedData::Homogenous(t) = self {
+                try_tensor_to_slice::<T>(t)
+            } else {
+                Err(TensorConversionError::Unknown("data must be homogenous".to_string()))
+            }
+        }
+
+        pub fn build_heterogenous<T: Element>(&self) -> TensorResult<HashMap<String, &[T]>> {
+            if let MixedData::Heterogenous(t) = self {
+                let mut map = HashMap::new();
+                for (k, v) in t.iter() {
+                    map.insert(k.to_string(), try_tensor_to_slice::<T>(v)?);
+                }
+                Ok(map)
+            } else {
+                Err(TensorConversionError::Unknown("data must be heterogenous".to_string()))
+            }
+        }
+    }
 
     #[derive(FromPyObject)]
     pub struct UniformSampler {
@@ -109,7 +142,21 @@ mod algo {
 
     #[derive(FromPyObject)]
     pub struct WeightedSampler {
-        weights: Tensor,
+        weights: MixedData,
+    }
+
+    impl WeightedSampler {
+        pub fn build_homogenous<T: Float + SampleUniform + Element>(&self) -> TensorResult<ns::WeightedSampler<T>> {
+            let weights = self.weights.build_homogenous::<T>()?;
+            Ok(ns::WeightedSampler::new(EdgeAttr::new(weights)))
+        }
+
+        pub fn build_heterogenous<T: Float + SampleUniform + Element>(&self) -> TensorResult<HashMap<RelType, ns::WeightedSampler<T>>> {
+            let weights = self.weights.build_heterogenous::<T>()?;
+            Ok(weights.into_iter()
+                .map(|(k, v)| (k, ns::WeightedSampler::new(EdgeAttr::new(v))))
+                .collect())
+        }
     }
 
     #[derive(FromPyObject)]
@@ -121,30 +168,34 @@ mod algo {
     #[derive(FromPyObject)]
     pub struct TemporalFilter {
         window: (i64, i64),
-        timestamps: Tensor,
-        initial_state: Tensor,
+        timestamps: MixedData,
         forward: bool,
         mode: usize,
     }
 
     impl TemporalFilter {
-        pub fn build<
+        pub fn build_homogenous<
             const FORWARD: bool, const MODE: usize
-        >(&self) -> TensorResult<(ns::TemporalFilter<i64, FORWARD, MODE>, &[i64])> {
-            let timestamps_data = try_tensor_to_slice::<i64>(&self.timestamps)?;
-            let initial_state_data = try_tensor_to_slice::<i64>(&self.initial_state)?;
+        >(&self) -> TensorResult<ns::TemporalFilter<i64, FORWARD, MODE>> {
+            let timestamps_data = self.timestamps.build_homogenous::<i64>()?;
             let window = self.window.0..=self.window.1;
+            Ok(ns::TemporalFilter::new(window, EdgeAttr::new(timestamps_data)))
+        }
 
-            Ok((
-                ns::TemporalFilter::new(window, EdgeAttr::new(timestamps_data)),
-                initial_state_data,
-            ))
+        pub fn build_heterogenous<
+            const FORWARD: bool, const MODE: usize
+        >(&self) -> TensorResult<HashMap<RelType, ns::TemporalFilter<i64, FORWARD, MODE>>> {
+            let timestamps_data = self.timestamps.build_heterogenous::<i64>()?;
+            let window = self.window.0..=self.window.1;
+            Ok(timestamps_data.into_iter()
+                .map(|(k, v)| (k, ns::TemporalFilter::new(window.clone(), EdgeAttr::new(v))))
+                .collect())
         }
     }
 
     #[derive(FromPyObject)]
     pub enum FilterType {
-        TemporalFilter(TemporalFilter),
+        TemporalFilter((TemporalFilter, MixedData)),
     }
 
     macro_rules! match_mixed_return {
@@ -177,7 +228,7 @@ mod algo {
         Tensor,
         Tensor,
         Tensor,
-        Vec<(NodePtr, EdgePtr, NodePtr)>
+        Vec<LayerOffset>
     )> {
         let mut rng = super::random::get();
 
@@ -191,29 +242,41 @@ mod algo {
             match (sampler.as_ref()) {
                 Some(SamplerType::Uniform(UniformSampler { with_replacement: true })) => ns::UnweightedSampler::<true>,
                 Some(SamplerType::Uniform(UniformSampler { with_replacement: false })) => ns::UnweightedSampler::<false>,
-                Some(SamplerType::Weighted(WeightedSampler { weights })) => {
-                    let weights_data = try_tensor_to_slice::<f64>(weights)?;
-                    ns::WeightedSampler::new(EdgeAttr::new(weights_data))
-                },
+                Some(SamplerType::Weighted(s@WeightedSampler { .. })) => s.build_homogenous::<f64>()?,
                 _ => ns::UnweightedSampler::<false>,
             } ==> |sampler| {
                 match_mixed_return! {
                     match (filter.as_ref()) {
-                        Some(FilterType::TemporalFilter(ft @ TemporalFilter {
+                        Some(FilterType::TemporalFilter((ft @ TemporalFilter {
                             mode: ns::TEMPORAL_SAMPLE_STATIC, ..
-                        })) => ft.build::<true, {ns::TEMPORAL_SAMPLE_STATIC}>()?,
-                        Some(FilterType::TemporalFilter(ft @ TemporalFilter {
+                        }, inputs_state))) => (
+                            ft.build_homogenous::<true, {ns::TEMPORAL_SAMPLE_STATIC}>()?,
+                            inputs_state.build_homogenous::<i64>()?,
+                        ),
+                        Some(FilterType::TemporalFilter((ft @ TemporalFilter {
                             forward: true, mode: ns::TEMPORAL_SAMPLE_RELATIVE, ..
-                        })) => ft.build::<true, {ns::TEMPORAL_SAMPLE_RELATIVE}>()?,
-                        Some(FilterType::TemporalFilter(ft @ TemporalFilter {
+                        }, inputs_state))) => (
+                            ft.build_homogenous::<true, {ns::TEMPORAL_SAMPLE_RELATIVE}>()?,
+                            inputs_state.build_homogenous::<i64>()?,
+                        ),
+                        Some(FilterType::TemporalFilter((ft @ TemporalFilter {
                             forward: false, mode: ns::TEMPORAL_SAMPLE_RELATIVE, ..
-                        })) => ft.build::<false, {ns::TEMPORAL_SAMPLE_RELATIVE}>()?,
-                        Some(FilterType::TemporalFilter(ft @ TemporalFilter {
+                        }, inputs_state))) => (
+                            ft.build_homogenous::<false, {ns::TEMPORAL_SAMPLE_RELATIVE}>()?,
+                            inputs_state.build_homogenous::<i64>()?,
+                        ),
+                        Some(FilterType::TemporalFilter((ft @ TemporalFilter {
                             forward: true, mode: ns::TEMPORAL_SAMPLE_DYNAMIC, ..
-                        })) => ft.build::<true, {ns::TEMPORAL_SAMPLE_DYNAMIC}>()?,
-                        Some(FilterType::TemporalFilter(ft @ TemporalFilter {
+                        }, inputs_state))) => (
+                            ft.build_homogenous::<true, {ns::TEMPORAL_SAMPLE_DYNAMIC}>()?,
+                            inputs_state.build_homogenous::<i64>()?,
+                        ),
+                        Some(FilterType::TemporalFilter((ft @ TemporalFilter {
                             forward: false, mode: ns::TEMPORAL_SAMPLE_DYNAMIC, ..
-                        })) => ft.build::<false, {ns::TEMPORAL_SAMPLE_DYNAMIC}>()?,
+                        }, inputs_state))) => (
+                            ft.build_homogenous::<false, {ns::TEMPORAL_SAMPLE_DYNAMIC}>()?,
+                            inputs_state.build_homogenous::<i64>()?,
+                        ),
                         _ => (ns::IdentityFilter, &vec![(); inputs_data.len()][..]),
                     } ==> |(filter, inputs_state)| {
                         Ok(crate::algo::neighbor_sampling::neighbor_sampling_homogenous(
@@ -234,6 +297,130 @@ mod algo {
             rows,
             cols,
             edge_index,
+            layer_offsets,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyfunction]
+    pub fn neighbor_sampling_heterogenous(
+        node_types: Vec<NodeType>,
+        edge_types: Vec<EdgeType>,
+        col_ptrs: HashMap<RelType, Tensor>,
+        row_indices: HashMap<RelType, Tensor>,
+        inputs: HashMap<NodeType, Tensor>,
+        num_neighbors: HashMap<RelType, Vec<usize>>,
+        num_hops: usize,
+        sampler: Option<SamplerType>,
+        filter: Option<FilterType>,
+    ) -> PyResult<(
+        HashMap<NodeType, Tensor>,
+        HashMap<RelType, Tensor>,
+        HashMap<RelType, Tensor>,
+        HashMap<RelType, Tensor>,
+        HashMap<RelType, Vec<LayerOffset>>,
+    )> {
+        let mut rng = super::random::get();
+
+        let rel_types = col_ptrs.keys().cloned().collect::<Vec<_>>();
+        let mut graphs = HashMap::new();
+        for rel_type in rel_types.iter().cloned() {
+            let ptrs = try_tensor_to_slice::<i64>(&col_ptrs[&rel_type])?;
+            let indices = try_tensor_to_slice::<i64>(&row_indices[&rel_type])?;
+            graphs.insert(rel_type, CscGraph::new(ptrs, indices));
+        }
+
+        let inputs_data: HashMap<NodeType, &[i64]> = inputs.iter().map(|(node_type, tensor)| {
+            let data = try_tensor_to_slice::<i64>(tensor)?;
+            Ok((node_type.clone(), data))
+        }).collect::<PyResult<_>>()?;
+
+        let mut tmp = HashMap::new();
+        let (samples, coo_builders, layer_offsets) = match_mixed_return! {
+            match (sampler.as_ref()) {
+                Some(SamplerType::Uniform(UniformSampler { with_replacement: true })) => {
+                    hashmap_from(rel_types.iter(), |_k| ns::UnweightedSampler::<true>)
+                },
+                Some(SamplerType::Uniform(UniformSampler { with_replacement: false })) => {
+                    hashmap_from(rel_types.iter(), |_k| ns::UnweightedSampler::<false>)
+                },
+                Some(SamplerType::Weighted(s@WeightedSampler { .. })) => {
+                    s.build_heterogenous::<f64>()?
+                },
+                _ => {
+                    hashmap_from(rel_types.iter(), |_k| ns::UnweightedSampler::<false>)
+                },
+            } ==> |sampler| {
+                match_mixed_return! {
+                    match (filter.as_ref()) {
+                        Some(FilterType::TemporalFilter((ft @ TemporalFilter {
+                            mode: ns::TEMPORAL_SAMPLE_STATIC, ..
+                        }, inputs_state))) => (
+                            ft.build_heterogenous::<true, {ns::TEMPORAL_SAMPLE_STATIC}>()?,
+                            inputs_state.build_heterogenous::<i64>()?,
+                        ),
+                        Some(FilterType::TemporalFilter((ft @ TemporalFilter {
+                            forward: true, mode: ns::TEMPORAL_SAMPLE_RELATIVE, ..
+                        }, inputs_state))) => (
+                            ft.build_heterogenous::<true, {ns::TEMPORAL_SAMPLE_RELATIVE}>()?,
+                            inputs_state.build_heterogenous::<i64>()?,
+                        ),
+                        Some(FilterType::TemporalFilter((ft @ TemporalFilter {
+                            forward: false, mode: ns::TEMPORAL_SAMPLE_RELATIVE, ..
+                        }, inputs_state))) => (
+                            ft.build_heterogenous::<false, {ns::TEMPORAL_SAMPLE_RELATIVE}>()?,
+                            inputs_state.build_heterogenous::<i64>()?,
+                        ),
+                        Some(FilterType::TemporalFilter((ft @ TemporalFilter {
+                            forward: true, mode: ns::TEMPORAL_SAMPLE_DYNAMIC, ..
+                        }, inputs_state))) => (
+                            ft.build_heterogenous::<true, {ns::TEMPORAL_SAMPLE_DYNAMIC}>()?,
+                            inputs_state.build_heterogenous::<i64>()?,
+                        ),
+                        Some(FilterType::TemporalFilter((ft @ TemporalFilter {
+                            forward: false, mode: ns::TEMPORAL_SAMPLE_DYNAMIC, ..
+                        }, inputs_state))) => (
+                            ft.build_heterogenous::<false, {ns::TEMPORAL_SAMPLE_DYNAMIC}>()?,
+                            inputs_state.build_heterogenous::<i64>()?,
+                        ),
+                        _ => {
+                            tmp = hashmap_from(rel_types.iter(), |k| vec![(); inputs_data[*k].len()]);
+                            (
+                                hashmap_from(rel_types.iter(), |_k| ns::IdentityFilter),
+                                hashmap_from(rel_types.iter(), |k| tmp[*k].as_slice()),
+                            )
+                        },
+                    } ==> |(filter, inputs_state)| {
+                        Ok(crate::algo::neighbor_sampling::neighbor_sampling_heterogenous(
+                            &mut rng, &node_types, &edge_types, &graphs, &inputs_data, &num_neighbors, num_hops, &sampler, &filter, &inputs_state,
+                        )) as TensorResult<(
+                            HashMap<NodeType, Vec<NodeIdx>>,
+                            HashMap<RelType, CooGraphBuilder>,
+                            HashMap<RelType, Vec<LayerOffset>>,
+                        )>
+                    }
+                }
+            }
+        }?;
+
+        let samples: HashMap<NodeType, Tensor> = samples.into_iter().map(|(ty, samples)| {
+            (ty, samples.try_into().expect("Can't convert vec into tensor"))
+        }).collect();
+        let mut rows = HashMap::new();
+        let mut cols = HashMap::new();
+        let mut edge_indexes = HashMap::new();
+        for (rel_type, coo_builder) in coo_builders.into_iter() {
+            let (row, col, edge_index) = coo_builder.to_tensor();
+            rows.insert(rel_type.clone(), row);
+            cols.insert(rel_type.clone(), col);
+            edge_indexes.insert(rel_type.clone(), edge_index);
+        }
+
+        Ok((
+            samples,
+            rows,
+            cols,
+            edge_indexes,
             layer_offsets,
         ))
     }
@@ -268,6 +455,7 @@ mod algo {
     pub fn module(py: Python, p: &PyModule) -> PyResult<()> {
         let m = PyModule::new(py, "algo")?;
         m.add_function(wrap_pyfunction!(neighbor_sampling_homogenous, m)?)?;
+        m.add_function(wrap_pyfunction!(neighbor_sampling_heterogenous, m)?)?;
         m.add_function(wrap_pyfunction!(random_walk, m)?)?;
         p.add_submodule(m)?;
         Ok(())

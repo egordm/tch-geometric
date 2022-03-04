@@ -15,6 +15,8 @@ pub enum TensorConversionError {
     InvalidDType(Kind, Kind),
     #[error("Tensor must be of rank {0:?}")]
     InvalidShape(Option<String>),
+    #[error("Unknown error: {0:?}")]
+    Unknown(String),
 }
 
 #[cfg(feature = "extension-module")]
