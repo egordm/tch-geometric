@@ -384,10 +384,10 @@ mod algo {
                             inputs_state.build_heterogenous::<i64>()?,
                         ),
                         _ => {
-                            tmp = hashmap_from(rel_types.iter(), |k| vec![(); inputs_data[*k].len()]);
+                            tmp = hashmap_from(inputs_data.keys(), |k| vec![(); inputs_data[*k].len()]);
                             (
                                 hashmap_from(rel_types.iter(), |_k| ns::IdentityFilter),
-                                hashmap_from(rel_types.iter(), |k| tmp[*k].as_slice()),
+                                hashmap_from(inputs_data.keys(), |k| tmp[*k].as_slice()),
                             )
                         },
                     } ==> |(filter, inputs_state)| {

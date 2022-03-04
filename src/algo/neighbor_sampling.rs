@@ -259,15 +259,19 @@ pub fn neighbor_sampling_heterogenous<
     let mut states: HashMap<NodeType, Vec<F::State>> = HashMap::new();
 
     for node_type in node_types {
-        samples
+        let samples = samples
             .entry(node_type.clone())
-            .or_insert_with(Vec::new)
-            .extend_from_slice(inputs[node_type]);
+            .or_insert_with(Vec::new);
+        if let Some(inputs) = inputs.get(node_type) {
+            samples.extend_from_slice(inputs);
+        }
 
-        states
+        let states = states
             .entry(node_type.clone())
-            .or_insert_with(Vec::new)
-            .extend_from_slice(inputs_state[node_type]);
+            .or_insert_with(Vec::new);
+        if let Some(inputs_state) = inputs_state.get(node_type) {
+            states.extend_from_slice(inputs_state);
+        }
     }
 
     let mut layer_offsets: HashMap<RelType, Vec<LayerOffset>> = graphs.keys()
