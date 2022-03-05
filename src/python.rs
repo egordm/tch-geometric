@@ -452,11 +452,39 @@ mod algo {
         Ok(walks)
     }
 
+    #[pyfunction]
+    pub fn negative_sample_neighbors(
+        row_ptrs: Tensor,
+        col_indices: Tensor,
+        graph_size: (i64, i64),
+        inputs: Tensor,
+        num_neg: i64,
+        try_count: i64
+    ) -> PyResult<(Tensor, Vec<usize>)> {
+        let mut rng = super::random::get();
+
+        let ptrs = try_tensor_to_slice::<i64>(&row_ptrs)?;
+        let indices = try_tensor_to_slice::<i64>(&col_indices)?;
+        let graph = CsrGraph::new(ptrs, indices);
+
+        let (output, mask) = crate::algo::negative_sampling::negative_sample_neighbors(
+            &mut rng,
+            &graph,
+            graph_size,
+            &inputs,
+            num_neg,
+            try_count,
+        )?;
+
+        Ok((output, mask))
+    }
+
     pub fn module(py: Python, p: &PyModule) -> PyResult<()> {
         let m = PyModule::new(py, "algo")?;
         m.add_function(wrap_pyfunction!(neighbor_sampling_homogenous, m)?)?;
         m.add_function(wrap_pyfunction!(neighbor_sampling_heterogenous, m)?)?;
         m.add_function(wrap_pyfunction!(random_walk, m)?)?;
+        m.add_function(wrap_pyfunction!(negative_sample_neighbors, m)?)?;
         p.add_submodule(m)?;
         Ok(())
     }
