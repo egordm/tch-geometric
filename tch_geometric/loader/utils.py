@@ -15,6 +15,15 @@ def edge_type_to_str(edge_type: Union[EdgeType, str]) -> RelType:
     return edge_type if isinstance(edge_type, str) else '__'.join(edge_type)
 
 
+def to_csr(data: Union[Data, EdgeStorage]) -> Tuple[Tensor, Tensor, Tensor]:
+    if not hasattr(data, 'edge_index'):
+        raise AttributeError("Data object does not contain attribute 'edge_index'")
+
+    size = data.size()
+    row_ptrs, col_indices, perm = lib.data.to_csr(data.edge_index, size)
+    return row_ptrs, col_indices, perm
+
+
 def to_csc(data: Union[Data, EdgeStorage]) -> Tuple[Tensor, Tensor, Tensor]:
     if not hasattr(data, 'edge_index'):
         raise AttributeError("Data object does not contain attribute 'edge_index'")
