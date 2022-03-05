@@ -360,7 +360,7 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use crate::algo::neighbor_sampling::{IdentityFilter, LayerOffset, SamplingFilter, TemporalFilter, UnweightedSampler, WeightedSampler};
     use crate::data::{CscGraph, CscGraphData, EdgeAttr, CooGraphBuilder};
-    use crate::data::tests::{load_fake_hetero_graph, load_karate_graph};
+    use crate::data::{load_fake_hetero_graph, load_karate_graph};
     use crate::utils::{EdgeType, NodeIdx, NodePtr, NodeType, RelType};
     use super::{TEMPORAL_SAMPLE_STATIC, TEMPORAL_SAMPLE_RELATIVE};
 
@@ -437,7 +437,6 @@ mod tests {
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
-        let node_count = x.size()[0];
         let graph_data = CscGraphData::try_from(&coo_graph).unwrap();
         let graph = CscGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
@@ -467,7 +466,6 @@ mod tests {
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
-        let node_count = x.size()[0];
         let graph_data = CscGraphData::try_from(&coo_graph).unwrap();
         let graph = CscGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
@@ -499,7 +497,6 @@ mod tests {
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
-        let node_count = x.size()[0];
         let graph_data = CscGraphData::try_from(&coo_graph).unwrap();
         let graph = CscGraph::<i64, i64>::try_from(&graph_data).unwrap();
 

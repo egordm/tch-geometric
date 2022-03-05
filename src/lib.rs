@@ -1,7 +1,5 @@
-extern crate core;
-
-mod utils;
-mod data;
-mod algo;
+pub mod utils;
+pub mod data;
+pub mod algo;
 #[cfg(feature = "extension-module")]
 mod python;

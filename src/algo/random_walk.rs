@@ -78,7 +78,7 @@ mod tests {
     use tch::Tensor;
     use crate::algo::random_walk::random_walk;
     use crate::data::{CsrGraphData, CsrGraph};
-    use crate::data::tests::load_karate_graph;
+    use crate::data::load_karate_graph;
     use crate::utils::tensor::try_tensor_to_slice;
 
     #[test]
@@ -87,7 +87,6 @@ mod tests {
 
         let (x, _, coo_graph) = load_karate_graph();
 
-        let node_count = x.size()[0];
         let graph_data = CsrGraphData::try_from(&coo_graph).unwrap();
         let graph = CsrGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
