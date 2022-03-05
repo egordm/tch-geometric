@@ -1,9 +1,12 @@
 from dataclasses import dataclass
-from typing import Union, List, Dict, Tuple, Optional
+from typing import Union, List, Dict, Tuple, Optional, Callable
 
 import torch
 from torch import Tensor
+from torch.utils.data import Dataset, RandomSampler, SequentialSampler, BatchSampler
 from torch_geometric.data import Data, HeteroData
+from torch_geometric.loader.base import BaseDataLoader
+from torch_geometric.loader.utils import filter_data, filter_hetero_data
 from torch_geometric.typing import EdgeType, NodeType
 
 from tch_geometric.loader.utils import to_hetero_csc, to_csc, edge_type_to_str, RelType
@@ -108,7 +111,7 @@ class NeighborSampler:
             validate_mixeddata(inputs, hetero=False, dtype=torch.int64)
 
             sample_fn = lib.algo.neighbor_sampling_homogenous
-            samples, rows, cols, edges, layer_offsets = sample_fn(
+            nodes, rows, cols, edges, layer_offsets = sample_fn(
                 self.col_ptrs,
                 self.row_indices,
                 inputs,
@@ -116,7 +119,7 @@ class NeighborSampler:
                 self.edge_sampler,
                 self.edge_filter,
             )
-            return samples, rows, cols, edges, layer_offsets, inputs.numel()
+            return nodes, rows, cols, edges, layer_offsets, inputs.numel()
 
         elif issubclass(self.data_cls, HeteroData):
             validate_mixeddata(inputs, hetero=True, dtype=torch.int64)
@@ -126,7 +129,7 @@ class NeighborSampler:
             edge_filter = (self.edge_filter, input_states) if self.edge_filter else None
 
             sample_fn = lib.algo.neighbor_sampling_heterogenous
-            samples, rows, cols, edges, layer_offsets = sample_fn(
+            nodes, rows, cols, edges, layer_offsets = sample_fn(
                 self.node_types,
                 self.edge_types,
                 self.col_ptrs_dict,
@@ -138,4 +141,140 @@ class NeighborSampler:
                 edge_filter,
             )
             batch_size = {key: value.numel() for key, value in inputs.items()}
-            return samples, rows, cols, edges, layer_offsets, batch_size
+            return nodes, rows, cols, edges, layer_offsets, batch_size
+
+
+class SamplerDataset(Dataset):
+    def __init__(
+            self,
+            inputs: MixedData,
+            input_states: Optional[MixedData] = None
+    ) -> None:
+        super().__init__()
+        self.inputs = inputs
+        self.inputs_states = input_states
+
+    def __getitem__(self, index):
+        inputs = self.inputs[index]
+
+        if self.inputs_states:
+            states = self.inputs_states[index]
+        else:
+            states = None
+
+        return inputs, states
+
+    def __len__(self) -> int:
+        return len(self.inputs)
+
+
+class HeteroSamplerDataset(Dataset):
+    def __init__(
+            self,
+            inputs: MixedData,
+            input_states: Optional[MixedData] = None
+    ) -> None:
+        super().__init__()
+        self.node_types = list(inputs.keys())
+
+        node_type_map = {key: i for i, key in enumerate(self.node_types)}
+        inputs_items = []
+        types_items = []
+        states_items = []
+        for key, value in inputs.items():
+            inputs_items.append(value)
+            types_items.append(torch.full([value.shape[0]], node_type_map[key], dtype=torch.int64))
+            if input_states:
+                states_items.append(input_states[key])
+
+        self.inputs = torch.cat(inputs_items, dim=0)
+        self.types = torch.cat(types_items, dim=0)
+        self.inputs_states = torch.cat(states_items, dim=0) if states_items else None
+
+    def __getitem__(self, index):
+        index = torch.tensor(index, dtype=torch.int64)
+        types = self.types[index]
+        inputs = {}
+        states = {} if self.inputs_states else None
+
+        used_types = torch.unique(types)
+        for t in used_types:
+            type_name = self.node_types[t]
+            mask = index[types == t]
+            inputs[type_name] = self.inputs[mask]
+            if self.inputs_states:
+                states[type_name] = self.inputs_states[mask]
+
+        return inputs, states
+
+    def __len__(self) -> int:
+        return len(self.inputs)
+
+
+class NeighborLoader(BaseDataLoader):
+    def __init__(
+            self,
+            data: Union[Data, HeteroData],
+            num_neighbors: NumNeighbors,
+            dataset: Dataset,
+            edge_sampler: Optional[EdgeSampler] = None,
+            edge_filter: Optional[EdgeFilter] = None,
+            inputs_states: Optional[MixedData] = None,
+            neighbor_sampler: Optional[NeighborSampler] = None,
+            transform: Callable = None,
+            shuffle: bool = False,
+            generator=None,
+            batch_size: int = 1,
+            drop_last: bool = False,
+            **kwargs,
+    ):
+        self.data = data
+        self.num_neighbors = num_neighbors
+        self.edge_sampler = edge_sampler
+        self.edge_filter = edge_filter
+        self.inputs_states = inputs_states
+        self.neighbor_sampler = neighbor_sampler
+        self.transform = transform
+        self._homogenous = isinstance(self.data, Data)
+        self.batch_size = batch_size
+
+        if neighbor_sampler is None:
+            self.neighbor_sampler = NeighborSampler(
+                data, num_neighbors, edge_sampler, edge_filter
+            )
+
+        # Default sampler to set autocollate to False
+        if shuffle:
+            sampler = RandomSampler(dataset, generator=generator)
+        else:
+            sampler = SequentialSampler(dataset)
+        batch_sampler = BatchSampler(sampler, batch_size, drop_last)
+
+        super().__init__(
+            dataset,
+            collate_fn=self.sample,
+            sampler=batch_sampler,
+            batch_size=None,
+            shuffle=shuffle,
+            drop_last=drop_last,
+            **kwargs,
+        )
+
+    def sample(self, inputs):
+        inputs, states = inputs
+        return self.neighbor_sampler(inputs, states)
+
+    def transform_fn(self, out):
+        if self._homogenous:
+            node, row, col, edge, layer_offsets, batch_size = out
+            data = filter_data(self.data, node, row, col, edge, self.neighbor_sampler.perm)
+            data.batch_size = batch_size
+        else:
+            node_dict, row_dict, col_dict, edge_dict, layer_offsets, batch_size = out
+            data = filter_hetero_data(
+                self.data, node_dict, row_dict, col_dict, edge_dict, self.neighbor_sampler.perm_dict
+            )
+            for node_type, batch_size in batch_size.items():
+                data[node_type].batch_size = batch_size
+
+        return data if self.transform is None else self.transform(data)
