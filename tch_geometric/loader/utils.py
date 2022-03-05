@@ -5,7 +5,7 @@ from torch_geometric.data import HeteroData, Data
 from torch_geometric.data.storage import EdgeStorage
 from torch_geometric.typing import EdgeType
 
-import tch_geometric.tch_geometric as lib
+import tch_geometric.tch_geometric as native
 
 RelType = str
 
@@ -20,7 +20,7 @@ def to_csr(data: Union[Data, EdgeStorage]) -> Tuple[Tensor, Tensor, Tensor]:
         raise AttributeError("Data object does not contain attribute 'edge_index'")
 
     size = data.size()
-    row_ptrs, col_indices, perm = lib.data.to_csr(data.edge_index, size)
+    row_ptrs, col_indices, perm = native.to_csr(data.edge_index, size)
     return row_ptrs, col_indices, perm
 
 
@@ -29,7 +29,7 @@ def to_csc(data: Union[Data, EdgeStorage]) -> Tuple[Tensor, Tensor, Tensor]:
         raise AttributeError("Data object does not contain attribute 'edge_index'")
 
     size = data.size()
-    col_ptrs, row_indices, perm = lib.data.to_csc(data.edge_index, size)
+    col_ptrs, row_indices, perm = native.to_csc(data.edge_index, size)
     return col_ptrs, row_indices, perm
 
 

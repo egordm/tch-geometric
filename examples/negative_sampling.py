@@ -15,7 +15,7 @@ row_ptrs, col_indices, perm = to_csr(data)
 
 inputs = data.edge_index[0, :]
 start = perf_counter()
-neg_samples, errors = thg.algo.negative_sample_neighbors(row_ptrs, col_indices, data.size(), inputs, 5, 5)
+neg_samples, errors = thg.native.negative_sample_neighbors(row_ptrs, col_indices, data.size(), inputs, 5, 5)
 end = perf_counter()
 print(f'Neg Sample Neighbors: {end - start}')
 

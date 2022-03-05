@@ -11,7 +11,7 @@ from torch_geometric.typing import EdgeType, NodeType
 
 from tch_geometric.loader.utils import to_hetero_csc, to_csc, edge_type_to_str, RelType
 
-import tch_geometric.tch_geometric as lib
+import tch_geometric.tch_geometric as native
 
 NumNeighbors = Union[List[int], Dict[EdgeType, List[int]]]
 
@@ -110,7 +110,7 @@ class NeighborSampler:
         if issubclass(self.data_cls, Data):
             validate_mixeddata(inputs, hetero=False, dtype=torch.int64)
 
-            sample_fn = lib.algo.neighbor_sampling_homogenous
+            sample_fn = native.neighbor_sampling_homogenous
             nodes, rows, cols, edges, layer_offsets = sample_fn(
                 self.col_ptrs,
                 self.row_indices,
@@ -128,7 +128,7 @@ class NeighborSampler:
                 validate_mixeddata(input_states, hetero=True, dtype=torch.int64)
             edge_filter = (self.edge_filter, input_states) if self.edge_filter else None
 
-            sample_fn = lib.algo.neighbor_sampling_heterogenous
+            sample_fn = native.neighbor_sampling_heterogenous
             nodes, rows, cols, edges, layer_offsets = sample_fn(
                 self.node_types,
                 self.edge_types,

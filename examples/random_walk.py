@@ -12,7 +12,7 @@ q = 1.5
 dataset = pyg.datasets.FakeDataset()
 data = dataset[0]
 
-row_ptrs, col_indices, perm = thg.data.to_csr(data.edge_index, len(data.x))
+row_ptrs, col_indices, perm = thg.native.to_csr(data.edge_index, len(data.x))
 
 model = Node2Vec(
     data.edge_index,
@@ -27,7 +27,7 @@ model = Node2Vec(
 ).to(device)
 
 start = torch.tensor([0, 1, 2, 3, 4, 5, 6, 7], dtype=torch.long)
-pos_rw = thg.algo.random_walk(row_ptrs, col_indices, start.repeat(walks_per_node), walk_length - 1, p, q)
+pos_rw = thg.native.random_walk(row_ptrs, col_indices, start.repeat(walks_per_node), walk_length - 1, p, q)
 neg_rw = model.neg_sample(start.repeat(walks_per_node))
 
 example = model.pos_sample(start)

@@ -85,11 +85,9 @@ mod data {
     }
 
 
-    pub fn module(py: Python, p: &PyModule) -> PyResult<()> {
-        let m = PyModule::new(py, "data")?;
+    pub fn module(py: Python, m: &PyModule) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(to_csc, m)?)?;
         m.add_function(wrap_pyfunction!(to_csr, m)?)?;
-        p.add_submodule(m)?;
         Ok(())
     }
 }
@@ -479,13 +477,11 @@ mod algo {
         Ok((output, mask))
     }
 
-    pub fn module(py: Python, p: &PyModule) -> PyResult<()> {
-        let m = PyModule::new(py, "algo")?;
+    pub fn module(py: Python, m: &PyModule) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(neighbor_sampling_homogenous, m)?)?;
         m.add_function(wrap_pyfunction!(neighbor_sampling_heterogenous, m)?)?;
         m.add_function(wrap_pyfunction!(random_walk, m)?)?;
         m.add_function(wrap_pyfunction!(negative_sample_neighbors, m)?)?;
-        p.add_submodule(m)?;
         Ok(())
     }
 }
