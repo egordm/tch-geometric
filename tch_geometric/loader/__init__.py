@@ -1,2 +1,2 @@
-from .utils import *
+from .types import *
 from .neighbor_loader import *

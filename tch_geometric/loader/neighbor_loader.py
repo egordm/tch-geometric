@@ -1,74 +1,14 @@
-from dataclasses import dataclass
-from typing import Union, List, Dict, Tuple, Optional, Callable
+from typing import Union, Optional, Callable
 
 import torch
-from torch import Tensor
 from torch.utils.data import Dataset, RandomSampler, SequentialSampler, BatchSampler
 from torch_geometric.data import Data, HeteroData
 from torch_geometric.loader.base import BaseDataLoader
 from torch_geometric.loader.utils import filter_data, filter_hetero_data
-from torch_geometric.typing import EdgeType, NodeType
-
-from tch_geometric.loader.utils import to_hetero_csc, to_csc, edge_type_to_str, RelType
 
 import tch_geometric.tch_geometric as native
-
-NumNeighbors = Union[List[int], Dict[EdgeType, List[int]]]
-
-MixedData = Union[Tensor, Dict[str, Tensor]]
-
-
-def validate_mixeddata(data: MixedData, hetero: bool = False, dtype=None):
-    if hetero:
-        assert isinstance(data, dict)
-        for v in data.values():
-            assert v.dtype == dtype
-    else:
-        assert data.dtype == dtype
-
-
-@dataclass
-class EdgeSampler:
-    def validate(self, hetero: bool = False) -> None:
-        raise NotImplementedError
-
-
-@dataclass
-class UniformEdgeSampler(EdgeSampler):
-    with_replacement: bool = False
-
-    def validate(self, hetero: bool = False) -> None:
-        pass
-
-
-@dataclass
-class WeightedEdgeSampler(EdgeSampler):
-    weights: MixedData
-
-    def validate(self, hetero: bool = False) -> None:
-        validate_mixeddata(self.weights, hetero=hetero, dtype=torch.float64)
-
-
-TEMPORAL_SAMPLE_STATIC: int = 0
-TEMPORAL_SAMPLE_RELATIVE: int = 1
-TEMPORAL_SAMPLE_DYNAMIC: int = 2
-
-
-@dataclass
-class EdgeFilter:
-    def validate(self, hetero: bool = False) -> None:
-        raise NotImplementedError
-
-
-@dataclass
-class TemporalEdgeFilter:
-    window: Tuple[int, int]
-    timestamps: MixedData
-    forward: bool = False
-    mode: int = TEMPORAL_SAMPLE_STATIC
-
-    def validate(self, hetero: bool = False) -> None:
-        validate_mixeddata(self.timestamps, hetero=hetero, dtype=torch.int64)
+from tch_geometric.data import to_hetero_csc, to_csc, edge_type_to_str
+from tch_geometric.loader import NumNeighbors, EdgeSampler, EdgeFilter, MixedData, validate_mixeddata
 
 
 class NeighborSampler:

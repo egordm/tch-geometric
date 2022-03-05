@@ -2,7 +2,7 @@ from time import perf_counter
 
 import torch_geometric as pyg
 import tch_geometric as thg
-from tch_geometric.loader import to_csr
+from tch_geometric.data import to_csr
 
 device = 'cpu'
 samples_per_node = 4
