@@ -6,13 +6,15 @@ use crate::data::graph::{Csc, Csr, SparseGraph, SparseGraphType, SparseGraphType
 use crate::utils::tensor::{check_device, TensorResult, TensorConversionError, try_tensor_to_slice_mut, try_tensor_to_slice};
 use crate::utils::types::IndexType;
 
-pub struct CooGraphData {
+pub type Size = (i64, i64);
+
+pub struct CooGraphStorage {
     pub row_col: Tensor,
-    pub size: (i64, i64),
+    pub size: Size,
 }
 
-impl CooGraphData {
-    pub fn new(row_col: Tensor, size: (i64, i64)) -> Self {
+impl CooGraphStorage {
+    pub fn new(row_col: Tensor, size: Size) -> Self {
         Self {
             row_col,
             size,
@@ -89,10 +91,10 @@ pub fn ind2ptr(
     Ok(out)
 }
 
-impl<Ty: SparseGraphTypeTrait> TryFrom<&CooGraphData> for SparseGraphData<Ty> {
+impl<Ty: SparseGraphTypeTrait> TryFrom<&CooGraphStorage> for SparseGraphData<Ty> {
     type Error = TensorConversionError;
 
-    fn try_from(value: &CooGraphData) -> Result<Self, Self::Error> {
+    fn try_from(value: &CooGraphStorage) -> Result<Self, Self::Error> {
         let (row, col) = (value.row(), value.col());
         let size = value.size;
 
@@ -135,7 +137,7 @@ mod tests {
     use ndarray::{arr2, Array2};
     use tch::Tensor;
     use crate::data::convert::{CscGraphData, ind2ptr};
-    use crate::data::CooGraphData;
+    use crate::data::CooGraphStorage;
     use crate::data::graph::CscGraph;
 
     #[test]
@@ -159,7 +161,7 @@ mod tests {
             [0, 0, 0, 1, 4, 1, 2, 2],
         ]);
         let edge_index = Tensor::try_from(edge_index_data).unwrap();
-        let coo_graph_data = CooGraphData::new(edge_index, (m, m) );
+        let coo_graph_data = CooGraphStorage::new(edge_index, (m, m) );
 
         let result = CscGraphData::try_from(&coo_graph_data).unwrap();
         let graph: CscGraph<i64, i64> = (&result).try_into().unwrap();

@@ -361,7 +361,7 @@ mod tests {
     use crate::algo::neighbor_sampling::{IdentityFilter, LayerOffset, SamplingFilter, TemporalFilter, UnweightedSampler, WeightedSampler};
     use crate::data::{CscGraph, CscGraphData, EdgeAttr, CooGraphBuilder};
     use crate::data::{load_fake_hetero_graph, load_karate_graph};
-    use crate::utils::{EdgeType, NodeIdx, NodePtr, NodeType, RelType};
+    use crate::utils::{EdgeType, NodeIdx, NodeType, RelType};
     use super::{TEMPORAL_SAMPLE_STATIC, TEMPORAL_SAMPLE_RELATIVE};
 
     pub fn validate_neighbor_samples(
@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     pub fn test_neighbor_sampling_homogenous() {
-        let (x, _, coo_graph) = load_karate_graph();
+        let (_x, _, coo_graph) = load_karate_graph();
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
@@ -462,7 +462,7 @@ mod tests {
 
     #[test]
     pub fn test_neighbor_sampling_homogenous_weighted() {
-        let (x, _, coo_graph) = load_karate_graph();
+        let (_x, _, coo_graph) = load_karate_graph();
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
@@ -493,7 +493,7 @@ mod tests {
 
     #[test]
     pub fn test_neighbor_sampling_homogenous_temporal() {
-        let (x, _, coo_graph) = load_karate_graph();
+        let (_x, _, coo_graph) = load_karate_graph();
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 

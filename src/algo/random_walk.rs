@@ -86,7 +86,7 @@ mod tests {
     fn test_randomwalk() {
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
-        let (x, _, coo_graph) = load_karate_graph();
+        let (_x, _, coo_graph) = load_karate_graph();
 
         let graph_data = CsrGraphData::try_from(&coo_graph).unwrap();
         let graph = CsrGraph::<i64, i64>::try_from(&graph_data).unwrap();

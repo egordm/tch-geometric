@@ -61,10 +61,7 @@ pub fn csc_edge_cumsum<T: Element + Add<Output=T> + Default + Copy>(
 
 #[cfg(test)]
 mod tests {
-    use std::convert::{TryFrom, TryInto};
-    use ndarray::{arr2, Array2};
     use tch::Tensor;
-    use crate::data::graph::CscGraph;
     use crate::data::transform::{csc_edge_cumsum, csc_sort_edges};
 
 

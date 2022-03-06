@@ -7,7 +7,7 @@ mod data {
     use pyo3::prelude::*;
     use std::convert::TryFrom;
     use tch::Tensor;
-    use crate::data::{CooGraphData, CscGraphData, CsrGraphData};
+    use crate::data::{CooGraphStorage, CscGraphData, CsrGraphData};
 
     #[derive(FromPyObject)]
     pub enum GraphSize {
@@ -30,7 +30,7 @@ mod data {
         size: GraphSize,
     ) -> PyResult<(Tensor, Tensor, Tensor)> {
         let size = size.to_tuple();
-        let coo_graph = CooGraphData::new(row_col, size);
+        let coo_graph = CooGraphStorage::new(row_col, size);
         let CscGraphData {
             ptrs, indices, perm, ..
         } = CscGraphData::try_from(&coo_graph)?;
@@ -44,7 +44,7 @@ mod data {
         size: GraphSize,
     ) -> PyResult<(Tensor, Tensor, Tensor)> {
         let size = size.to_tuple();
-        let coo_graph = CooGraphData::new(row_col, size);
+        let coo_graph = CooGraphStorage::new(row_col, size);
         let CsrGraphData {
             ptrs, indices, perm, ..
         } = CsrGraphData::try_from(&coo_graph)?;
