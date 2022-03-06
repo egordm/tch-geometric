@@ -8,7 +8,8 @@ from torch_geometric.loader.utils import filter_data, filter_hetero_data
 
 import tch_geometric.tch_geometric as native
 from tch_geometric.data import to_hetero_csc, to_csc, edge_type_to_str
-from tch_geometric.loader import NumNeighbors, EdgeSampler, EdgeFilter, MixedData, validate_mixeddata
+from tch_geometric.transforms import EdgeFilter, EdgeSampler, NumNeighbors
+from tch_geometric.types import MixedData, validate_mixeddata
 
 
 class NeighborSampler:

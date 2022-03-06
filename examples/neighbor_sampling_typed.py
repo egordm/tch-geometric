@@ -1,28 +1,30 @@
 import torch
 import torch_geometric as pyg
+from torch_geometric.data import Data, HeteroData
 
-from tch_geometric.loader import NeighborSampler, NeighborLoader, SamplerDataset, HeteroSamplerDataset
+from tch_geometric.transforms import NeighborSamplerTransform
+
+device = 'cpu'
+samples_per_node = 4
+num_neighbors = [4, 3]
 
 dataset = pyg.datasets.FakeDataset()
-data = dataset[0]
-inputs = torch.tensor([3, 2, 1, 0])
+data: Data = dataset[0]
 
-sampler = NeighborSampler(data, [4, 3])
-batch = sampler(inputs)
+inputs = torch.arange(10, dtype=torch.long).to(device)
 
-loader = NeighborLoader(data=data, num_neighbors=[4, 3], dataset=SamplerDataset(inputs), batch_size=4)
-batch = next(iter(loader))
+transform = NeighborSamplerTransform(data, num_neighbors=[4, 3])
+batch = transform(inputs)
 
+print('Sampled Homogenous')
 
 dataset = pyg.datasets.FakeHeteroDataset()
-data = dataset[0]
+data: HeteroData = dataset[0]
 
-sampler = NeighborSampler(data, [4, 3])
-batch = sampler({'v0': inputs})
+inputs = {'v0': inputs}
 
-sampler_dataset = HeteroSamplerDataset({'v0': inputs, 'v1': inputs, 'v2': inputs})
-loader = NeighborLoader(data=data, num_neighbors=[4, 3], dataset=sampler_dataset, batch_size=4)
-batch = next(iter(loader))
+transform = NeighborSamplerTransform(data, num_neighbors=[4, 3])
+batch = transform(inputs)
 
+print('Sampled Heterogenous')
 
-print('done')
