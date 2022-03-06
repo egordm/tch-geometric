@@ -70,7 +70,7 @@ mod algo {
     use tch::Tensor;
     use crate::algo::neighbor_sampling as ns;
     use crate::algo::neighbor_sampling::LayerOffset;
-    use crate::data::{CscGraph, CsrGraph, EdgeAttr, CooGraphBuilder};
+    use crate::data::{CscGraph, CsrGraph, EdgeAttr, CooGraphBuilder, Size};
     use crate::utils::{hashmap_from, EdgeType, NodeIdx, NodeType, RelType, TensorConversionError, TensorResult, try_tensor_to_slice, random};
 
     #[derive(FromPyObject)]
@@ -419,34 +419,105 @@ mod algo {
     }
 
     #[pyfunction]
-    pub fn negative_sample_neighbors(
+    pub fn negative_sample_neighbors_homogenous(
         row_ptrs: Tensor,
         col_indices: Tensor,
-        graph_size: (i64, i64),
+        graph_size: Size,
         inputs: Tensor,
         num_neg: i64,
         try_count: i64
-    ) -> PyResult<(Tensor, Vec<usize>)> {
+    ) -> PyResult<(Tensor, Tensor, Tensor, usize)> {
+        let mut rng = random::rng_get();
+
         let ptrs = try_tensor_to_slice::<i64>(&row_ptrs)?;
         let indices = try_tensor_to_slice::<i64>(&col_indices)?;
         let graph = CsrGraph::new(ptrs, indices);
 
-        let (output, mask) = crate::algo::negative_sampling::negative_sample_neighbors(
+        let inputs = try_tensor_to_slice::<i64>(&inputs)?;
+
+        let (samples, edge_index, sample_count) = crate::algo::negative_sampling::negative_sample_neighbors_homogenous(
+            &mut rng,
             &graph,
             graph_size,
             &inputs,
             num_neg,
             try_count,
-        )?;
+        );
 
-        Ok((output, mask))
+        let samples = samples.try_into().expect("Can't convert vec into tensor");
+        let rows = edge_index.rows.try_into().expect("Can't convert vec into tensor");
+        let cols = edge_index.cols.try_into().expect("Can't convert vec into tensor");
+
+        Ok((samples, rows, cols, sample_count))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyfunction]
+    pub fn negative_sample_neighbors_heterogenous(
+        node_types: Vec<NodeType>,
+        edge_types: Vec<EdgeType>,
+        row_ptrs: HashMap<RelType, Tensor>,
+        col_indices: HashMap<RelType, Tensor>,
+        sizes: HashMap<RelType, Size>,
+        inputs: HashMap<NodeType, Tensor>,
+        num_neg: i64,
+        try_count: i64,
+    ) -> PyResult<(
+        HashMap<NodeType, Tensor>,
+        HashMap<RelType, Tensor>,
+        HashMap<RelType, Tensor>,
+        HashMap<NodeType, usize>,
+    )> {
+        let mut rng = random::rng_get();
+
+        let mut graphs = HashMap::new();
+        for rel_type in row_ptrs.keys().cloned() {
+            let ptrs = try_tensor_to_slice::<i64>(&row_ptrs[&rel_type])?;
+            let indices = try_tensor_to_slice::<i64>(&col_indices[&rel_type])?;
+            let size = sizes[&rel_type];
+            graphs.insert(rel_type, (CsrGraph::new(ptrs, indices), size));
+        }
+
+        let inputs_data: HashMap<NodeType, &[i64]> = inputs.iter().map(|(node_type, tensor)| {
+            let data = try_tensor_to_slice::<i64>(tensor)?;
+            Ok((node_type.clone(), data))
+        }).collect::<PyResult<_>>()?;
+
+        let (samples, edge_index, sample_count) = crate::algo::negative_sampling::negative_sample_neighbors_heterogenous(
+            &mut rng,
+            &node_types,
+            &edge_types,
+            &graphs,
+            &inputs_data,
+            num_neg,
+            try_count,
+        );
+
+        let samples: HashMap<NodeType, Tensor> = samples.into_iter().map(|(ty, samples)| {
+            (ty, samples.try_into().expect("Can't convert vec into tensor"))
+        }).collect();
+        let mut rows = HashMap::new();
+        let mut cols = HashMap::new();
+        for (rel_type, coo_builder) in edge_index.into_iter() {
+            let (row, col, _edge_index) = coo_builder.to_tensor();
+            rows.insert(rel_type.clone(), row);
+            cols.insert(rel_type.clone(), col);
+        }
+
+        Ok((
+            samples,
+            rows,
+            cols,
+            sample_count,
+        ))
     }
 
     pub fn module(_py: Python, m: &PyModule) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(neighbor_sampling_homogenous, m)?)?;
         m.add_function(wrap_pyfunction!(neighbor_sampling_heterogenous, m)?)?;
         m.add_function(wrap_pyfunction!(random_walk, m)?)?;
-        m.add_function(wrap_pyfunction!(negative_sample_neighbors, m)?)?;
+        m.add_function(wrap_pyfunction!(negative_sample_neighbors_homogenous, m)?)?;
+        m.add_function(wrap_pyfunction!(negative_sample_neighbors_heterogenous, m)?)?;
         Ok(())
     }
 }
