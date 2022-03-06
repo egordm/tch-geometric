@@ -34,8 +34,8 @@ pub fn negative_sample_neighbors_homogenous(
         for _ in 0..num_neg {
             for _t in 0..try_count {
                 let w = rng.gen_range(0..node_count);
-                if !graph.has_edge(v, w) {
-                    let j = *samples_mapping.entry(v).or_insert(samples.len());
+                if !graph.has_edge(v, w) && v != w {
+                    let j = *samples_mapping.entry(w).or_insert(samples.len());
                     edge_index.push_edge(i as i64, j as i64, -1);
                     break;
                 }
@@ -106,8 +106,8 @@ pub fn negative_sample_neighbors_heterogenous(
 
                 for _t in 0..try_count {
                     let w = rng.gen_range(0..*node_count);
-                    if !graph.has_edge(v, w) {
-                        let j = *samples_mapping.entry(v).or_insert(samples.len());
+                    if !graph.has_edge(v, w) && v != w {
+                        let j = *samples_mapping.entry(w).or_insert(samples.len());
                         edge_index.push_edge(i as i64, j as i64, -1);
                         break;
                     }

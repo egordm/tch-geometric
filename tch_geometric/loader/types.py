@@ -2,21 +2,11 @@ from dataclasses import dataclass
 from typing import Union, List, Dict, Tuple
 
 import torch
-from torch import Tensor
 from torch_geometric.typing import EdgeType
 
+from tch_geometric.types import MixedData, validate_mixeddata
+
 NumNeighbors = Union[List[int], Dict[EdgeType, List[int]]]
-
-MixedData = Union[Tensor, Dict[str, Tensor]]
-
-
-def validate_mixeddata(data: MixedData, hetero: bool = False, dtype=None):
-    if hetero:
-        assert isinstance(data, dict)
-        for v in data.values():
-            assert v.dtype == dtype
-    else:
-        assert data.dtype == dtype
 
 
 @dataclass
