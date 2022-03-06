@@ -55,12 +55,27 @@ def random_walk(
     ...
 
 
-def negative_sample_neighbors(
+def negative_sample_neighbors_homogenous(
         row_ptrs: Tensor,
         col_indices: Tensor,
         graph_size: Tuple[int, int],
         inputs: Tensor,
         num_neg: int,
         try_count: int,
-) -> Tuple[Tensor, List[int]]:
+) -> Tuple[Tensor, Tensor, Tensor, int]:
+    ...
+
+
+def negative_sample_neighbors_heterogenous(
+        node_types: List[NodeType],
+        edge_types: List[EdgeType],
+        row_ptrs: Dict[RelType, Tensor],
+        col_indices: Dict[RelType, Tensor],
+        sizes: Dict[RelType, Tuple[int, int]],
+        inputs: Dict[NodeType, Tensor],
+        num_neg: int,
+        try_count: int,
+) -> Tuple[
+    Dict[NodeType, Tensor], Dict[RelType, Tensor], Dict[RelType, Tensor], Dict[NodeType, int]
+]:
     ...
