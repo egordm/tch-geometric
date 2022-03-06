@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::ops::{Neg, RangeInclusive, Sub};
 use std::slice::Iter;
 use num_traits::Float;
@@ -177,12 +178,14 @@ pub fn neighbor_sampling_homogenous<
     // Initialize some data structures for the sampling process
     let mut samples: Vec<NodeIdx> = Vec::new();
     let mut states: Vec<F::State> = Vec::new();
+    let mut samples_mapping: HashMap<NodeIdx, NodePtr<usize>> = HashMap::new();
 
     let mut layer_offsets: Vec<LayerOffset> = Vec::new();
     let mut edge_index = CooGraphBuilder::new();
 
     samples.extend_from_slice(inputs);
     states.extend_from_slice(inputs_state);
+    samples_mapping.extend(samples.iter().enumerate().map(|(i, &s)| (s, i)));
 
     let (mut begin, mut end) = (0, samples.len());
     for num_samples in num_neighbors.iter().cloned() {
@@ -209,7 +212,7 @@ pub fn neighbor_sampling_homogenous<
 
             for edge_ptr in samples_iter {
                 let v = graph.get_by_ptr(*edge_ptr);
-                let j = samples.len();
+                let j = *samples_mapping.entry(v).or_insert(samples.len());
                 let state = filter.mutate(&w_state, w, *edge_ptr);
 
                 samples.push(v);
@@ -257,6 +260,7 @@ pub fn neighbor_sampling_heterogenous<
     // Initialize some data structures for the sampling process
     let mut samples: HashMap<NodeType, Vec<NodeIdx>> = HashMap::new();
     let mut states: HashMap<NodeType, Vec<F::State>> = HashMap::new();
+    let mut samples_mapping: HashMap<NodeType, HashMap<NodeIdx, NodePtr<usize>>> = HashMap::new();
 
     for node_type in node_types {
         let samples = samples
@@ -271,6 +275,13 @@ pub fn neighbor_sampling_heterogenous<
             .or_insert_with(Vec::new);
         if let Some(inputs_state) = inputs_state.get(node_type) {
             states.extend_from_slice(inputs_state);
+        }
+
+        let samples_mapping = samples_mapping
+            .entry(node_type.clone())
+            .or_insert_with(HashMap::new);
+        if inputs.contains_key(node_type) {
+            samples_mapping.extend(samples.iter().enumerate().map(|(i, &s)| (s, i)));
         }
     }
 
@@ -304,6 +315,9 @@ pub fn neighbor_sampling_heterogenous<
             let src_samples = unsafe { (&samples[src_node_type] as *const _ as *mut Vec<NodeIdx>).as_mut() }.unwrap();
             let src_states = unsafe { (&states[src_node_type] as *const _ as *mut Vec<F::State>).as_mut() }.unwrap();
 
+            let mut src_samples_mapping = samples_mapping.get_mut(src_node_type).unwrap();
+
+
             let graph = &graphs[rel_type];
             let edge_index = edge_index.get_mut(rel_type).unwrap();
 
@@ -329,7 +343,7 @@ pub fn neighbor_sampling_heterogenous<
 
                 for edge_ptr in samples_iter {
                     let v = graph.get_by_ptr(*edge_ptr);
-                    let j = src_samples.len();
+                    let j = *src_samples_mapping.entry(v).or_insert(src_samples.len());
                     let state = filter.mutate(&w_state, w, *edge_ptr);
 
                     src_samples.push(v);
