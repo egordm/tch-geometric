@@ -83,7 +83,7 @@ mod tests {
     use rand::SeedableRng;
     use tch::Tensor;
     use crate::algo::negative_sampling::negative_sample_neighbors_heterogenous;
-    use crate::data::{CscGraph, CscGraphData, CsrGraph, CsrGraphData, load_fake_hetero_graph, Size};
+    use crate::data::{CscGraph, CscGraphStorage, CsrGraph, CsrGraphStorage, load_fake_hetero_graph, Size};
     use crate::data::load_karate_graph;
     use crate::utils::{EdgeType, NodeIdx, NodeType, RelType, try_tensor_to_slice};
 
@@ -92,7 +92,7 @@ mod tests {
         let (x, _, coo_graph) = load_karate_graph();
 
         let node_count = x.size()[0];
-        let graph_data = CsrGraphData::try_from(&coo_graph).unwrap();
+        let graph_data = CsrGraphStorage::try_from(&coo_graph).unwrap();
         let graph = CsrGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
         let test: Vec<_> = (0..node_count).collect();
@@ -132,8 +132,8 @@ mod tests {
             to_edge_types.insert(format!("{}__{}__{}", src_node_type, rel_type, dst_node_type), e.clone());
         }
 
-        let graph_data: HashMap<RelType, CsrGraphData> = coo_graphs.iter().map(|((src, rel, dst), coo_graph)| {
-            let graph_data = CsrGraphData::try_from(coo_graph).unwrap();
+        let graph_data: HashMap<RelType, CsrGraphStorage> = coo_graphs.iter().map(|((src, rel, dst), coo_graph)| {
+            let graph_data = CsrGraphStorage::try_from(coo_graph).unwrap();
             (format!("{}__{}__{}", src, rel, dst), graph_data)
         }).collect();
         let graph_size: HashMap<RelType, Size> = to_edge_types.iter().map(|(rel_type, (src, _, dst))| {

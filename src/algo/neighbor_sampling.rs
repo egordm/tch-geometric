@@ -359,7 +359,7 @@ mod tests {
     use std::convert::TryFrom;
     use rand::{Rng, SeedableRng};
     use crate::algo::neighbor_sampling::{IdentityFilter, LayerOffset, SamplingFilter, TemporalFilter, UnweightedSampler, WeightedSampler};
-    use crate::data::{CscGraph, CscGraphData, EdgeAttr, CooGraphBuilder};
+    use crate::data::{CscGraph, CscGraphStorage, EdgeAttr, CooGraphBuilder};
     use crate::data::{load_fake_hetero_graph, load_karate_graph};
     use crate::utils::{EdgeType, NodeIdx, NodeType, RelType};
     use super::{TEMPORAL_SAMPLE_STATIC, TEMPORAL_SAMPLE_RELATIVE};
@@ -437,7 +437,7 @@ mod tests {
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
-        let graph_data = CscGraphData::try_from(&coo_graph).unwrap();
+        let graph_data = CscGraphStorage::try_from(&coo_graph).unwrap();
         let graph = CscGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
         let inputs = vec![0_i64, 1, 4, 5];
@@ -466,7 +466,7 @@ mod tests {
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
-        let graph_data = CscGraphData::try_from(&coo_graph).unwrap();
+        let graph_data = CscGraphStorage::try_from(&coo_graph).unwrap();
         let graph = CscGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
         let weights_data = (0..graph.edge_count()).map(|_| rng.gen_range(0.2..5.0)).collect::<Vec<f64>>();
@@ -497,7 +497,7 @@ mod tests {
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
-        let graph_data = CscGraphData::try_from(&coo_graph).unwrap();
+        let graph_data = CscGraphStorage::try_from(&coo_graph).unwrap();
         let graph = CscGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
         let timestamps_data = (0..graph.edge_count()).map(|_| rng.gen_range(0..4)).collect::<Vec<i64>>();
@@ -580,8 +580,8 @@ mod tests {
             to_edge_types.insert(format!("{}__{}__{}", src_node_type, rel_type, dst_node_type), e.clone());
         }
 
-        let graph_data: HashMap<RelType, CscGraphData> = coo_graphs.iter().map(|((src, rel, dst), coo_graph)| {
-            let graph_data = CscGraphData::try_from(coo_graph).unwrap();
+        let graph_data: HashMap<RelType, CscGraphStorage> = coo_graphs.iter().map(|((src, rel, dst), coo_graph)| {
+            let graph_data = CscGraphStorage::try_from(coo_graph).unwrap();
             (format!("{}__{}__{}", src, rel, dst), graph_data)
         }).collect();
         let graphs: HashMap<RelType, CscGraph> = graph_data.iter().map(|(rel_type, graph_data)| {

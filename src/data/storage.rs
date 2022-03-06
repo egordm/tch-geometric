@@ -30,26 +30,35 @@ impl CooGraphStorage {
     }
 }
 
-pub struct SparseGraphData<Ty> {
+pub struct SparseGraphStorage<Ty> {
     pub ptrs: Tensor,
     pub indices: Tensor,
-    pub perm: Tensor,
+    pub perm: Option<Tensor>,
     _phantom: std::marker::PhantomData<Ty>,
 }
 
-pub type CscGraphData = SparseGraphData<Csc>;
-pub type CsrGraphData = SparseGraphData<Csr>;
+pub type CscGraphStorage = SparseGraphStorage<Csc>;
+pub type CsrGraphStorage = SparseGraphStorage<Csr>;
 
-impl<Ty> SparseGraphData<Ty> {
+impl<Ty> SparseGraphStorage<Ty> {
     pub fn new(
         ptrs: Tensor,
         indices: Tensor,
-        perm: Tensor,
+        perm: Option<Tensor>,
     ) -> Self {
         Self {
-            ptrs,
-            indices,
-            perm,
+            ptrs, indices, perm,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn from_data(
+        ptrs: Tensor,
+        indices: Tensor,
+    ) -> Self {
+        Self {
+            ptrs, indices,
+            perm: None,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -91,7 +100,7 @@ pub fn ind2ptr(
     Ok(out)
 }
 
-impl<Ty: SparseGraphTypeTrait> TryFrom<&CooGraphStorage> for SparseGraphData<Ty> {
+impl<Ty: SparseGraphTypeTrait> TryFrom<&CooGraphStorage> for SparseGraphStorage<Ty> {
     type Error = TensorConversionError;
 
     fn try_from(value: &CooGraphStorage) -> Result<Self, Self::Error> {
@@ -104,14 +113,14 @@ impl<Ty: SparseGraphTypeTrait> TryFrom<&CooGraphStorage> for SparseGraphData<Ty>
                 let row_ptrs = ind2ptr(&row.i(&perm), size.0)?;
                 let col_indices = col.i(&perm);
 
-                Ok(Self::new(row_ptrs, col_indices, perm))
+                Ok(Self::new(row_ptrs, col_indices, Some(perm)))
             }
             SparseGraphType::Csc => {
                 let perm = (&col * size.0).add(&row).argsort(0, false);
                 let col_ptrs = ind2ptr(&col.i(&perm), size.1)?;
                 let row_indices = row.i(&perm);
 
-                Ok(Self::new(col_ptrs, row_indices, perm))
+                Ok(Self::new(col_ptrs, row_indices, Some(perm)))
             }
         }
     }
@@ -119,10 +128,10 @@ impl<Ty: SparseGraphTypeTrait> TryFrom<&CooGraphStorage> for SparseGraphData<Ty>
 
 impl<
     'a, Ty, Ptr: Element + IndexType, Ix: Element + IndexType
-> TryFrom<&'a SparseGraphData<Ty>> for SparseGraph<'a, Ty, Ptr, Ix> {
+> TryFrom<&'a SparseGraphStorage<Ty>> for SparseGraph<'a, Ty, Ptr, Ix> {
     type Error = TensorConversionError;
 
-    fn try_from(value: &'a SparseGraphData<Ty>) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a SparseGraphStorage<Ty>) -> Result<Self, Self::Error> {
         let ptrs = try_tensor_to_slice(&value.ptrs)?;
         let indices = try_tensor_to_slice(&value.indices)?;
 
@@ -136,7 +145,7 @@ mod tests {
     use std::convert::{TryFrom, TryInto};
     use ndarray::{arr2, Array2};
     use tch::Tensor;
-    use crate::data::convert::{CscGraphData, ind2ptr};
+    use crate::data::storage::{CscGraphStorage, ind2ptr};
     use crate::data::CooGraphStorage;
     use crate::data::graph::CscGraph;
 
@@ -163,7 +172,7 @@ mod tests {
         let edge_index = Tensor::try_from(edge_index_data).unwrap();
         let coo_graph_data = CooGraphStorage::new(edge_index, (m, m) );
 
-        let result = CscGraphData::try_from(&coo_graph_data).unwrap();
+        let result = CscGraphStorage::try_from(&coo_graph_data).unwrap();
         let graph: CscGraph<i64, i64> = (&result).try_into().unwrap();
 
         assert_eq!(graph.in_degree(0), 3);

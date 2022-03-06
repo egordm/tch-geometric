@@ -7,7 +7,7 @@ mod data {
     use pyo3::prelude::*;
     use std::convert::TryFrom;
     use tch::Tensor;
-    use crate::data::{CooGraphStorage, CscGraphData, CsrGraphData};
+    use crate::data::{CooGraphStorage, CscGraphStorage, CsrGraphStorage};
 
     #[derive(FromPyObject)]
     pub enum GraphSize {
@@ -28,12 +28,12 @@ mod data {
     pub fn to_csc(
         row_col: Tensor,
         size: GraphSize,
-    ) -> PyResult<(Tensor, Tensor, Tensor)> {
+    ) -> PyResult<(Tensor, Tensor, Option<Tensor>)> {
         let size = size.to_tuple();
         let coo_graph = CooGraphStorage::new(row_col, size);
-        let CscGraphData {
+        let CscGraphStorage {
             ptrs, indices, perm, ..
-        } = CscGraphData::try_from(&coo_graph)?;
+        } = CscGraphStorage::try_from(&coo_graph)?;
 
         Ok((ptrs, indices, perm))
     }
@@ -42,12 +42,12 @@ mod data {
     pub fn to_csr(
         row_col: Tensor,
         size: GraphSize,
-    ) -> PyResult<(Tensor, Tensor, Tensor)> {
+    ) -> PyResult<(Tensor, Tensor, Option<Tensor>)> {
         let size = size.to_tuple();
         let coo_graph = CooGraphStorage::new(row_col, size);
-        let CsrGraphData {
+        let CsrGraphStorage {
             ptrs, indices, perm, ..
-        } = CsrGraphData::try_from(&coo_graph)?;
+        } = CsrGraphStorage::try_from(&coo_graph)?;
 
         Ok((ptrs, indices, perm))
     }

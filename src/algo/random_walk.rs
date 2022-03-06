@@ -78,7 +78,7 @@ mod tests {
     use rand::SeedableRng;
     use tch::Tensor;
     use crate::algo::random_walk::random_walk;
-    use crate::data::{CsrGraphData, CsrGraph};
+    use crate::data::{CsrGraphStorage, CsrGraph};
     use crate::data::load_karate_graph;
     use crate::utils::tensor::try_tensor_to_slice;
 
@@ -88,7 +88,7 @@ mod tests {
 
         let (_x, _, coo_graph) = load_karate_graph();
 
-        let graph_data = CsrGraphData::try_from(&coo_graph).unwrap();
+        let graph_data = CsrGraphStorage::try_from(&coo_graph).unwrap();
         let graph = CsrGraph::<i64, i64>::try_from(&graph_data).unwrap();
 
         let start = Tensor::of_slice(&[0_i64, 1, 2, 3]);
