@@ -28,14 +28,15 @@ pub fn negative_sample_neighbors_homogenous(
     let node_count = graph_size.1;
     let sample_count = samples.len();
 
-    for i in 0..samples.len() as i64 {
-        let v = samples[i as usize];
-
+    for (i, &v) in inputs.iter().enumerate() {
         for _ in 0..num_neg {
             for _t in 0..try_count {
                 let w = rng.gen_range(0..node_count);
                 if !graph.has_edge(v, w) && v != w {
-                    let j = *samples_mapping.entry(w).or_insert(samples.len());
+                    let j = *samples_mapping.entry(w).or_insert_with(|| {
+                        samples.push(w);
+                        samples.len() - 1
+                    });
                     edge_index.push_edge(i as i64, j as i64, -1);
                     break;
                 }
@@ -102,12 +103,16 @@ pub fn negative_sample_neighbors_heterogenous(
                 let (rel_type, dst_type) = &node_rels[rng.gen_range(0..node_rels.len())];
                 let (graph, (_, node_count)) = &graphs[rel_type];
                 let samples_mapping = samples_mapping.get_mut(dst_type).unwrap();
+                let samples = samples.get_mut(dst_type).unwrap();
                 let edge_index = edge_index.get_mut(rel_type).unwrap();
 
                 for _t in 0..try_count {
                     let w = rng.gen_range(0..*node_count);
                     if !graph.has_edge(v, w) && v != w {
-                        let j = *samples_mapping.entry(w).or_insert(samples.len());
+                        let j = *samples_mapping.entry(w).or_insert_with(|| {
+                            samples.push(w);
+                            samples.len() - 1
+                        });
                         edge_index.push_edge(i as i64, j as i64, -1);
                         break;
                     }
