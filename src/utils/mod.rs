@@ -3,6 +3,7 @@ pub mod sampling;
 pub mod types;
 pub mod algo;
 pub mod iter;
+pub mod random;
 
 pub use tensor::*;
 pub use sampling::*;

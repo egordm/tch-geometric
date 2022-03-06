@@ -3,38 +3,6 @@
 use pyo3::prelude::*;
 
 
-mod random {
-    use std::cell::RefCell;
-    use std::sync::Mutex;
-    use lazy_static::lazy_static;
-    use rand::rngs::SmallRng;
-    use rand::{RngCore, SeedableRng};
-
-    lazy_static! {
-        static ref RNG: Mutex<RefCell<SmallRng>> = {
-            Mutex::new(RefCell::new(SmallRng::from_entropy()))
-        };
-    }
-
-    pub fn reseed(seed: [u8; 32]) {
-        let rng = RNG.lock().unwrap();
-        rng.replace(SmallRng::from_seed(seed));
-    }
-
-    pub fn get() -> SmallRng {
-        let guard = RNG.lock().unwrap();
-        let mut rng = guard.borrow_mut();
-        let seed = [
-            rng.next_u64(),
-            rng.next_u64(),
-            rng.next_u64(),
-            rng.next_u64(),
-        ];
-        let seed = unsafe { std::mem::transmute::<[u64; 4], [u8; 32]>(seed) };
-        SmallRng::from_seed(seed)
-    }
-}
-
 mod data {
     use pyo3::prelude::*;
     use std::convert::TryFrom;
@@ -103,7 +71,7 @@ mod algo {
     use crate::algo::neighbor_sampling as ns;
     use crate::algo::neighbor_sampling::LayerOffset;
     use crate::data::{CscGraph, CsrGraph, EdgeAttr, CooGraphBuilder};
-    use crate::utils::{hashmap_from, EdgeType, NodeIdx, NodeType, RelType, TensorConversionError, TensorResult, try_tensor_to_slice};
+    use crate::utils::{hashmap_from, EdgeType, NodeIdx, NodeType, RelType, TensorConversionError, TensorResult, try_tensor_to_slice, random};
 
     #[derive(FromPyObject)]
     pub enum MixedData {
@@ -228,7 +196,7 @@ mod algo {
         Tensor,
         Vec<LayerOffset>
     )> {
-        let mut rng = super::random::get();
+        let mut rng = random::rng_get();
 
         let ptrs = try_tensor_to_slice::<i64>(&col_ptrs)?;
         let indices = try_tensor_to_slice::<i64>(&row_indices)?;
@@ -318,7 +286,7 @@ mod algo {
         HashMap<RelType, Tensor>,
         HashMap<RelType, Vec<LayerOffset>>,
     )> {
-        let mut rng = super::random::get();
+        let mut rng = random::rng_get();
 
         let rel_types = col_ptrs.keys().cloned().collect::<Vec<_>>();
         let mut graphs = HashMap::new();
@@ -432,7 +400,7 @@ mod algo {
         p: f32,
         q: f32,
     ) -> PyResult<Tensor> {
-        let mut rng = super::random::get();
+        let mut rng = random::rng_get();
 
         let ptrs = try_tensor_to_slice::<i64>(&row_ptrs)?;
         let indices = try_tensor_to_slice::<i64>(&col_indices)?;
@@ -459,14 +427,11 @@ mod algo {
         num_neg: i64,
         try_count: i64
     ) -> PyResult<(Tensor, Vec<usize>)> {
-        let mut rng = super::random::get();
-
         let ptrs = try_tensor_to_slice::<i64>(&row_ptrs)?;
         let indices = try_tensor_to_slice::<i64>(&col_indices)?;
         let graph = CsrGraph::new(ptrs, indices);
 
         let (output, mask) = crate::algo::negative_sampling::negative_sample_neighbors(
-            &mut rng,
             &graph,
             graph_size,
             &inputs,
