@@ -1,7 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::ops::{Neg, RangeInclusive, Sub};
 use std::slice::Iter;
 use num_traits::Float;
@@ -315,8 +314,7 @@ pub fn neighbor_sampling_heterogenous<
             let src_samples = unsafe { (&samples[src_node_type] as *const _ as *mut Vec<NodeIdx>).as_mut() }.unwrap();
             let src_states = unsafe { (&states[src_node_type] as *const _ as *mut Vec<F::State>).as_mut() }.unwrap();
 
-            let mut src_samples_mapping = samples_mapping.get_mut(src_node_type).unwrap();
-
+            let src_samples_mapping = samples_mapping.get_mut(src_node_type).unwrap();
 
             let graph = &graphs[rel_type];
             let edge_index = edge_index.get_mut(rel_type).unwrap();
@@ -387,17 +385,17 @@ mod tests {
         num_neighbors: &[usize],
     ) {
         // Validate whether all edges are valid
-        for (j, i) in coo_builder.rows.iter().zip(coo_builder.cols.iter()) {
-            let v = samples_src[*j as usize];
-            let w = samples_dst[*i as usize];
+        for (j, i) in coo_builder.iter_edges() {
+            let v = samples_src[j as usize];
+            let w = samples_dst[i as usize];
             // Query for dst <- src edge because we are operating on csc graph
             assert!(graph.has_edge(w, v));
         }
 
         // Validate whether none of the nodes exceed the sampled number of neighbors
         let mut counts = vec![0_usize; samples_dst.len()];
-        for (j, i) in coo_builder.rows.iter().zip(coo_builder.cols.iter()) {
-            counts[*i as usize] += 1;
+        for (_j, i) in coo_builder.iter_edges() {
+            counts[i as usize] += 1;
         }
 
         let mut begin = 0;

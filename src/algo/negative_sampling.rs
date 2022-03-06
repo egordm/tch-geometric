@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 use rand::{Rng};
-use tch::{Tensor};
-use rayon::prelude::*;
 use crate::data::{CooGraphBuilder, CsrGraph};
-use crate::utils::{EdgeType, NodeIdx, NodePtr, NodeType, random, RelType, TensorResult, try_tensor_to_slice, try_tensor_to_slice_mut};
+use crate::utils::{EdgeType, NodeIdx, NodePtr, NodeType, RelType};
 
-pub fn negative_sample_neighbors(
+pub fn negative_sample_neighbors_homogenous(
     rng: &mut impl Rng,
     graph: &CsrGraph,
     graph_size: (i64, i64),
@@ -146,7 +144,7 @@ mod tests {
 
         let inputs: Vec<_> = (0..node_count).collect();
 
-        let (samples, edge_index, _sample_count) = super::negative_sample_neighbors(
+        let (samples, edge_index, _sample_count) = super::negative_sample_neighbors_homogenous(
             &mut rng,
             &graph,
             (node_count, node_count),
@@ -155,7 +153,7 @@ mod tests {
             5,
         );
 
-        for (&i, &j) in edge_index.rows.iter().zip(edge_index.cols.iter()) {
+        for (i, j) in edge_index.iter_edges() {
             let (v, w) = (samples[i as usize], samples[j as usize]);
             assert!(!graph.has_edge(v, w));
         }
@@ -215,7 +213,7 @@ mod tests {
             let (src, _, dst) = &to_edge_types[&rel_type];
             let (src_samples, dst_samples) = (&samples[src], &samples[dst]);
 
-            for (&i, &j) in edge_index.rows.iter().zip(edge_index.cols.iter()) {
+            for (i, j) in edge_index.iter_edges() {
                 let (v, w) = (src_samples[i as usize], dst_samples[j as usize]);
                 assert!(!graph.has_edge(v, w));
             }

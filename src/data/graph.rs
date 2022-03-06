@@ -145,6 +145,10 @@ impl<Ix: IndexType + Element, Ptr: IndexType + Element> CooGraphBuilder<Ix, Ptr>
         self.edge_index.push(edge_index);
     }
 
+    pub fn iter_edges(&self) -> impl Iterator<Item = (NodeIdx<Ix>, NodeIdx<Ix>)> + '_ {
+        self.rows.iter().cloned().zip(self.cols.iter().cloned())
+    }
+
     pub fn to_tensor(&self) -> (Tensor, Tensor, Tensor) {
         let cols = Tensor::of_slice(&self.cols);
         let rows = Tensor::of_slice(&self.rows);

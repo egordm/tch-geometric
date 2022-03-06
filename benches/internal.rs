@@ -3,7 +3,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use rand::SeedableRng;
 use tch::Tensor;
 use tch_geometric::data::{CsrGraphStorage, CsrGraph, load_karate_graph};
-use tch_geometric::algo::negative_sampling::{negative_sample_neighbors};
+use tch_geometric::algo::negative_sampling::{negative_sample_neighbors_homogenous};
 
 pub fn internal_benchmark(c: &mut Criterion) {
     let (x, _, coo_graph) = load_karate_graph();
@@ -16,7 +16,7 @@ pub fn internal_benchmark(c: &mut Criterion) {
     let inputs = Tensor::of_slice(&[0_i64, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
     c.bench_function("negative_sample_neighbors", |b| b.iter(|| {
-        negative_sample_neighbors(
+        negative_sample_neighbors_homogenous(
             &mut rng,
             &graph,
             (node_count, node_count),
