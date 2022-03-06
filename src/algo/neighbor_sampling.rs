@@ -24,9 +24,9 @@ pub struct IdentityFilter;
 impl SamplingFilter for IdentityFilter {
     type State = ();
 
-    fn filter(&self, state: &Self::State, src: NodeIdx, dst: EdgePtr<usize>) -> bool { true }
+    fn filter(&self, _state: &Self::State, _src: NodeIdx, _dst: EdgePtr<usize>) -> bool { true }
 
-    fn mutate(&self, state: &Self::State, src: NodeIdx, dst: EdgePtr<usize>) -> Self::State {}
+    fn mutate(&self, _state: &Self::State, _src: NodeIdx, _dst: EdgePtr<usize>) -> Self::State {}
 }
 
 pub const TEMPORAL_SAMPLE_STATIC: usize = 0;

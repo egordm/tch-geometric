@@ -3,7 +3,7 @@ use std::ops::DerefMut;
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 use rand::rngs::SmallRng;
-use rand::{RngCore, SeedableRng};
+use rand::{SeedableRng};
 
 lazy_static! {
         static ref RNG: Mutex<RefCell<SmallRng>> = {

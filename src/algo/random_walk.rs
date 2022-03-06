@@ -4,6 +4,7 @@ use tch::{Kind, Scalar, Tensor};
 use crate::data::graph::CsrGraph;
 use crate::utils::tensor::{TensorResult, try_tensor_to_slice, try_tensor_to_slice_mut};
 
+#[allow(non_snake_case)]
 pub fn random_walk(
     rng: &mut SmallRng,
     graph: &CsrGraph,

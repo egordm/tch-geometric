@@ -1,9 +1,8 @@
-use rand::{Rng, SeedableRng};
+use rand::{Rng};
 use tch::{ Tensor};
 use rayon::prelude::*;
 use crate::data::{ CsrGraph};
 use crate::utils::{random, TensorResult, try_tensor_to_slice, try_tensor_to_slice_mut};
-use crate::utils::tensor::{check_kind, TensorConversionError};
 
 pub fn negative_sample_neighbors(
     graph: &CsrGraph,
@@ -19,9 +18,8 @@ pub fn negative_sample_neighbors(
     let v = try_tensor_to_slice::<i64>(&v_data)?;
     let w = try_tensor_to_slice_mut::<i64>(&mut w_data)?;
 
-
     let mask: Vec<_> = w.into_par_iter().enumerate().map_init(
-        || random::rng_get(),
+        random::rng_get,
         |rng, (i, w)| {
             for _t in 0..try_count {
                 *w = rng.gen_range(0..node_count);
@@ -30,7 +28,7 @@ pub fn negative_sample_neighbors(
                 }
             }
 
-            return Some(i);
+            Some(i)
         }
     ).filter_map(|v| v).collect();
 
@@ -52,8 +50,6 @@ mod tests {
     #[test]
     pub fn test_negative_sample_neighbors() {
         let (x, _, coo_graph) = load_karate_graph();
-
-        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
         let node_count = x.size()[0];
         let graph_data = CsrGraphData::try_from(&coo_graph).unwrap();

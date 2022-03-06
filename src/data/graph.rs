@@ -126,6 +126,10 @@ pub struct CooGraphBuilder<Ix = DefaultIx, Ptr = DefaultPtr> {
     pub edge_index: Vec<EdgeIdx<Ptr>>,
 }
 
+impl<Ix: IndexType + Element, Ptr: IndexType + Element> Default for CooGraphBuilder<Ix, Ptr> {
+    fn default() -> Self { Self::new() }
+}
+
 impl<Ix: IndexType + Element, Ptr: IndexType + Element> CooGraphBuilder<Ix, Ptr> {
     pub fn new() -> Self {
         CooGraphBuilder {
@@ -150,6 +154,10 @@ impl<Ix: IndexType + Element, Ptr: IndexType + Element> CooGraphBuilder<Ix, Ptr>
     
     pub fn len(&self) -> usize {
         self.cols.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.cols.is_empty()
     }
 }
 

@@ -1,11 +1,57 @@
 use std::convert::{TryFrom};
 use std::ops::Add;
-use rayon::prelude::*;
 use tch::{Device, IndexOp, Tensor};
 use tch::kind::Element;
 use crate::data::graph::{Csc, Csr, SparseGraph, SparseGraphType, SparseGraphTypeTrait};
-use crate::utils::tensor::{check_device, TensorResult, TensorConversionError, try_tensor_to_slice_mut, try_tensor_to_slice, tensor_to_slice_mut};
+use crate::utils::tensor::{check_device, TensorResult, TensorConversionError, try_tensor_to_slice_mut, try_tensor_to_slice};
 use crate::utils::types::IndexType;
+
+pub struct CooGraphData {
+    pub row_col: Tensor,
+    pub size: (i64, i64),
+}
+
+impl CooGraphData {
+    pub fn new(row_col: Tensor, size: (i64, i64)) -> Self {
+        Self {
+            row_col,
+            size,
+        }
+    }
+
+    pub fn row(&self) -> Tensor {
+        self.row_col.select(0, 0)
+    }
+
+    pub fn col(&self) -> Tensor {
+        self.row_col.select(0, 1)
+    }
+}
+
+pub struct SparseGraphData<Ty> {
+    pub ptrs: Tensor,
+    pub indices: Tensor,
+    pub perm: Tensor,
+    _phantom: std::marker::PhantomData<Ty>,
+}
+
+pub type CscGraphData = SparseGraphData<Csc>;
+pub type CsrGraphData = SparseGraphData<Csr>;
+
+impl<Ty> SparseGraphData<Ty> {
+    pub fn new(
+        ptrs: Tensor,
+        indices: Tensor,
+        perm: Tensor,
+    ) -> Self {
+        Self {
+            ptrs,
+            indices,
+            perm,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
 
 pub fn ind2ptr(
     ind: &Tensor,
@@ -43,88 +89,12 @@ pub fn ind2ptr(
     Ok(out)
 }
 
-pub struct CooGraphData {
-    pub row_col: Tensor,
-    pub size: (i64, i64),
-}
-
-impl CooGraphData {
-    pub fn new(row_col: Tensor, size: (i64, i64)) -> Self {
-        Self {
-            row_col,
-            size,
-        }
-    }
-
-    pub fn row(&self) -> Tensor {
-        self.row_col.select(0, 0)
-    }
-
-    pub fn col(&self) -> Tensor {
-        self.row_col.select(0, 1)
-    }
-}
-
-
-pub struct SparseGraphData<Ty> {
-    pub ptrs: Tensor,
-    pub indices: Tensor,
-    pub perm: Tensor,
-    _phantom: std::marker::PhantomData<Ty>,
-}
-
-pub type CscGraphData = SparseGraphData<Csc>;
-pub type CsrGraphData = SparseGraphData<Csr>;
-
-impl<Ty> SparseGraphData<Ty> {
-    pub fn new(
-        ptrs: Tensor,
-        indices: Tensor,
-        perm: Tensor,
-    ) -> Self {
-        Self {
-            ptrs,
-            indices,
-            perm,
-            _phantom: std::marker::PhantomData,
-        }
-    }
-}
-
 impl<Ty: SparseGraphTypeTrait> TryFrom<&CooGraphData> for SparseGraphData<Ty> {
     type Error = TensorConversionError;
 
     fn try_from(value: &CooGraphData) -> Result<Self, Self::Error> {
         let (row, col) = (value.row(), value.col());
         let size = value.size;
-
-        match Ty::get_type() {
-            SparseGraphType::Csr => {
-                let perm = (&row * size.1).add(&col).argsort(0, false);
-                let row_ptrs = ind2ptr(&row.i(&perm), size.0)?;
-                let col_indices = col.i(&perm);
-
-                Ok(Self::new(row_ptrs, col_indices, perm))
-            }
-            SparseGraphType::Csc => {
-                let perm = (&col * size.0).add(&row).argsort(0, false);
-                let col_ptrs = ind2ptr(&col.i(&perm), size.1)?;
-                let row_indices = row.i(&perm);
-
-                Ok(Self::new(col_ptrs, row_indices, perm))
-            }
-        }
-    }
-}
-
-
-impl<Ty: SparseGraphTypeTrait> SparseGraphData<Ty> {
-    pub fn try_from_edge_index(
-        edge_index: &Tensor,
-        size: (i64, i64),
-    ) -> TensorResult<Self> {
-        let row = edge_index.select(0, 0);
-        let col = edge_index.select(0, 1);
 
         match Ty::get_type() {
             SparseGraphType::Csr => {
@@ -158,67 +128,14 @@ impl<
     }
 }
 
-pub fn csc_sort_edges(
-    col_ptrs: &Tensor,
-    perm: &Tensor,
-    row_weights: &Tensor,
-    descending: bool,
-) -> TensorResult<Tensor> {
-    check_device!(col_ptrs, Device::Cpu);
-
-    let new_perm = perm.copy();
-    let col_ptrs_data = try_tensor_to_slice::<i64>(col_ptrs)?;
-
-    // TODO: benchmark this implementation. Check if it's runtime is very different than serial or native rust one
-    col_ptrs_data.par_iter()
-        .zip(col_ptrs_data.par_iter().skip(1))
-        .for_each(|(col_start, col_end)| {
-            if col_end - col_start <= 1 {
-                return;
-            }
-
-            let sorted_idx = row_weights
-                .slice(0, *col_start, *col_end, 1)
-                .argsort(0, descending) + *col_start;
-            let slice_perm = perm.i(&sorted_idx);
-            new_perm.slice(0, *col_start, *col_end, 1).copy_(&slice_perm)
-        });
-
-    Ok(new_perm)
-}
-
-pub fn csc_edge_cumsum<T: Element + Add<Output=T> + Default + Copy>(
-    col_ptrs: &Tensor,
-    row_data: &mut Tensor,
-) -> TensorResult<()> {
-    check_device!(col_ptrs, Device::Cpu);
-
-    let col_ptrs_data = try_tensor_to_slice::<i64>(col_ptrs)?;
-    col_ptrs_data.par_iter()
-        .zip(col_ptrs_data.par_iter().skip(1))
-        .for_each(|(col_start, col_end)| {
-            if col_end - col_start <= 1 {
-                return;
-            }
-
-            let mut row_slice = row_data.slice(0, *col_start, *col_end, 1);
-            let row_data = tensor_to_slice_mut::<T>(&mut row_slice);
-            let mut acc = T::default();
-            for row_data_val in row_data.iter_mut() {
-                acc = acc + *row_data_val;
-                *row_data_val = acc;
-            }
-        });
-
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {
     use std::convert::{TryFrom, TryInto};
     use ndarray::{arr2, Array2};
     use tch::Tensor;
-    use crate::data::convert::{csc_edge_cumsum, csc_sort_edges, CscGraphData, ind2ptr};
+    use crate::data::convert::{CscGraphData, ind2ptr};
+    use crate::data::CooGraphData;
     use crate::data::graph::CscGraph;
 
     #[test]
@@ -242,9 +159,9 @@ mod tests {
             [0, 0, 0, 1, 4, 1, 2, 2],
         ]);
         let edge_index = Tensor::try_from(edge_index_data).unwrap();
+        let coo_graph_data = CooGraphData::new(edge_index, (m, m) );
 
-
-        let result = CscGraphData::try_from_edge_index(&edge_index, (m, m)).unwrap();
+        let result = CscGraphData::try_from(&coo_graph_data).unwrap();
         let graph: CscGraph<i64, i64> = (&result).try_into().unwrap();
 
         assert_eq!(graph.in_degree(0), 3);
@@ -253,36 +170,5 @@ mod tests {
         assert_eq!(graph.in_degree(2), 2);
         assert_eq!(graph.neighbors_slice(0), [1, 2, 3]);
         assert_eq!(graph.neighbors_slice(1), [4, 5]);
-    }
-
-    #[test]
-    fn test_csc_sort_edges() {
-        let col_ptrs_data: Vec<i64> = vec![0, 0, 0, 0, 3, 5, 5, 5, 7, 9];
-        let perm_data: Vec<i64> = vec![0, 1, 2, 3, 4, 5, 6, 7];
-        let row_weights_data: Vec<f64> = vec![9.0, 5.0, 8.0, 9.0, 10.0, 11.0, 1.0, 1.5];
-
-        let col_ptrs = Tensor::of_slice(&col_ptrs_data);
-        let perm = Tensor::of_slice(&perm_data);
-        let row_weights = Tensor::of_slice(&row_weights_data);
-
-        let result = csc_sort_edges(&col_ptrs, &perm, &row_weights, false).unwrap();
-        let result_data: Vec<i64> = result.into();
-
-        assert_eq!(result_data, vec![1, 2, 0, 3, 4, 6, 5, 7]);
-    }
-
-    #[test]
-    fn test_csc_edge_cumsum() {
-        let col_ptrs_data: Vec<i64> = vec![0, 0, 0, 0, 3, 5, 5, 5, 7, 9];
-        let row_data_data: Vec<f64> = vec![9.0, 5.0, 8.0, 9.0, 10.0, 11.0, 1.0, 1.5];
-
-        let col_ptrs = Tensor::of_slice(&col_ptrs_data);
-        let mut row_data = Tensor::of_slice(&row_data_data);
-
-        csc_edge_cumsum::<f64>(&col_ptrs, &mut row_data).unwrap();
-
-        let result_data: Vec<f64> = row_data.into();
-
-        assert_eq!(result_data, vec![9.0, 14.0, 22.0, 9.0, 19.0, 11.0, 12.0, 1.5]);
     }
 }
