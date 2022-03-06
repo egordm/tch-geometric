@@ -1,13 +1,11 @@
-use rand::Rng;
-use rand::rngs::SmallRng;
-use tch::{ Kind, Tensor};
+use rand::{Rng, SeedableRng};
+use tch::{ Tensor};
 use rayon::prelude::*;
 use crate::data::{ CsrGraph};
-use crate::utils::{TensorResult, try_tensor_to_slice, try_tensor_to_slice_mut};
-use crate::utils::tensor::{check_device, check_kind, TensorConversionError};
+use crate::utils::{random, TensorResult, try_tensor_to_slice, try_tensor_to_slice_mut};
+use crate::utils::tensor::{check_kind, TensorConversionError};
 
 pub fn negative_sample_neighbors(
-    rng: &mut SmallRng,
     graph: &CsrGraph,
     graph_size: (i64, i64),
     inputs: &Tensor,
@@ -21,8 +19,9 @@ pub fn negative_sample_neighbors(
     let v = try_tensor_to_slice::<i64>(&v_data)?;
     let w = try_tensor_to_slice_mut::<i64>(&mut w_data)?;
 
+
     let mask: Vec<_> = w.into_par_iter().enumerate().map_init(
-        || rng.clone(),
+        || random::rng_get(),
         |rng, (i, w)| {
             for _t in 0..try_count {
                 *w = rng.gen_range(0..node_count);
@@ -63,7 +62,6 @@ mod tests {
         let test: Vec<_> = (0..node_count).collect();
         let inputs = Tensor::of_slice(&test);
         let (output, mask) = super::negative_sample_neighbors(
-            &mut rng,
             &graph,
             (node_count, node_count),
             &inputs,
