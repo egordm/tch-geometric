@@ -23,7 +23,6 @@ struct BudgetValue {
 }
 
 impl BudgetDict {
-    #[allow(clippy::too_many_arguments)]
     pub fn update_budget(
         &mut self,
         rng: &mut impl Rng,
@@ -137,8 +136,6 @@ impl BudgetDict {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-#[allow(clippy::type_complexity)]
 pub fn hgt_sampling(
     rng: &mut impl Rng,
     _node_types: &[NodeType],
