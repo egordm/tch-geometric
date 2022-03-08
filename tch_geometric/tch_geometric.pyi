@@ -43,6 +43,19 @@ def neighbor_sampling_heterogenous(
 ]:
     ...
 
+def hgt_sampling(
+        node_types: List[NodeType],
+        edge_types: List[EdgeType],
+        col_ptrs: Dict[RelType, Tensor],
+        row_indices: Dict[RelType, Tensor],
+        inputs: Dict[NodeType, Tensor],
+        num_samples: Dict[NodeType, List[int]],
+        num_hops: int,
+) -> Tuple[
+    Dict[NodeType, Tensor], Dict[RelType, Tensor], Dict[RelType, Tensor], Dict[RelType, Tensor]
+]:
+    ...
+
 
 def random_walk(
         row_ptrs: Tensor,

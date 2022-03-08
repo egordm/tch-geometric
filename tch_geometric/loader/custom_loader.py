@@ -31,8 +31,6 @@ class CustomLoader(BaseDataLoader):
             collate_fn=self.sample,
             sampler=batch_sampler,
             batch_size=None,
-            shuffle=shuffle,
-            drop_last=drop_last,
             **kwargs,
         )
 
@@ -40,10 +38,5 @@ class CustomLoader(BaseDataLoader):
     def sample(self, inputs):
         pass
 
-    @abstractmethod
-    def transform(self, out):
-        pass
-
     def transform_fn(self, out):
-        data = self.transform(out)
-        return data if self.transform is None else self.transform(data)
+        return out if self.transform is None else self.transform(out)

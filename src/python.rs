@@ -391,6 +391,64 @@ mod algo {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[pyfunction]
+    pub fn hgt_sampling(
+        node_types: Vec<NodeType>,
+        edge_types: Vec<EdgeType>,
+        col_ptrs: HashMap<RelType, Tensor>,
+        row_indices: HashMap<RelType, Tensor>,
+        inputs: HashMap<NodeType, Tensor>,
+        num_samples: HashMap<NodeType, Vec<usize>>,
+        num_hops: usize,
+    ) -> PyResult<(
+        HashMap<NodeType, Tensor>,
+        HashMap<RelType, Tensor>,
+        HashMap<RelType, Tensor>,
+        HashMap<RelType, Tensor>,
+    )> {
+        let mut rng = random::rng_get();
+
+        let rel_types = col_ptrs.keys().cloned().collect::<Vec<_>>();
+        let mut graphs = HashMap::new();
+        for rel_type in rel_types.iter().cloned() {
+            let ptrs = try_tensor_to_slice::<i64>(&col_ptrs[&rel_type])?;
+            let indices = try_tensor_to_slice::<i64>(&row_indices[&rel_type])?;
+            graphs.insert(rel_type, CscGraph::new(ptrs, indices));
+        }
+
+        let inputs_data: HashMap<NodeType, &[i64]> = inputs.iter().map(|(node_type, tensor)| {
+            let data = try_tensor_to_slice::<i64>(tensor)?;
+            Ok((node_type.clone(), data))
+        }).collect::<PyResult<_>>()?;
+
+
+        let (samples, coo_builders) = crate::algo::hgt_sampling::hgt_sampling(
+            &mut rng, &node_types, &edge_types, &graphs, &inputs_data, &num_samples, num_hops,
+        );
+
+        let samples: HashMap<NodeType, Tensor> = samples.into_iter().map(|(ty, samples)| {
+            (ty, samples.try_into().expect("Can't convert vec into tensor"))
+        }).collect();
+        let mut rows = HashMap::new();
+        let mut cols = HashMap::new();
+        let mut edge_indexes = HashMap::new();
+        for (rel_type, coo_builder) in coo_builders.into_iter() {
+            let (row, col, edge_index) = coo_builder.to_tensor();
+            rows.insert(rel_type.clone(), row);
+            cols.insert(rel_type.clone(), col);
+            edge_indexes.insert(rel_type.clone(), edge_index);
+        }
+
+        Ok((
+            samples,
+            rows,
+            cols,
+            edge_indexes,
+        ))
+
+    }
+
     #[pyfunction]
     pub fn random_walk(
         row_ptrs: Tensor,
@@ -515,6 +573,7 @@ mod algo {
     pub fn module(_py: Python, m: &PyModule) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(neighbor_sampling_homogenous, m)?)?;
         m.add_function(wrap_pyfunction!(neighbor_sampling_heterogenous, m)?)?;
+        m.add_function(wrap_pyfunction!(hgt_sampling, m)?)?;
         m.add_function(wrap_pyfunction!(random_walk, m)?)?;
         m.add_function(wrap_pyfunction!(negative_sample_neighbors_homogenous, m)?)?;
         m.add_function(wrap_pyfunction!(negative_sample_neighbors_heterogenous, m)?)?;

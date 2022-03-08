@@ -28,8 +28,3 @@ default = ["extension-module"]
 [[bench]]
 name = "internal"
 harness = false
-
-[profile.release]
-lto = "fat"
-codegen-units = 1
-panic = "abort"
