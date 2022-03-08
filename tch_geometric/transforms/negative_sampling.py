@@ -1,12 +1,12 @@
-from typing import Union
+from typing import Union, Tuple
 
 import torch
+from torch import Tensor
 from torch_geometric.data import Data, HeteroData
-from torch_geometric.loader.utils import filter_data, filter_hetero_data
 
+import tch_geometric.tch_geometric as native
 from tch_geometric.data import to_csc, to_csr, to_hetero_csc, to_hetero_csr
 from tch_geometric.types import MixedData, validate_mixeddata
-import tch_geometric.tch_geometric as native
 
 
 class NegativeSamplerTransform:
@@ -36,7 +36,7 @@ class NegativeSamplerTransform:
         else:
             raise TypeError(f'Invalid graph type: {type(data)}')
 
-    def __call__(self, inputs: MixedData) -> Union[Data, HeteroData]:
+    def __call__(self, inputs: MixedData) -> Tuple[Tensor, Tuple[Tensor, Tensor], int]:
         if isinstance(self.data, Data):
             validate_mixeddata(inputs, hetero=False, dtype=torch.int64)
 
@@ -49,12 +49,8 @@ class NegativeSamplerTransform:
                 self.num_neg,
                 self.try_count,
             )
-            edge = torch.tensor([], dtype=torch.long)
 
-            data = filter_data(self.data, node, row, col, edge, self.perm)
-            data.batch_size = sample_count
-
-            return data
+            return node, (row, col), sample_count
 
         elif isinstance(self.data, HeteroData):
             validate_mixeddata(inputs, hetero=True, dtype=torch.int64)
@@ -71,9 +67,4 @@ class NegativeSamplerTransform:
                 self.try_count,
             )
 
-            edges = {k: torch.tensor([], dtype=torch.long) for k in rows.keys()}
-            data = filter_hetero_data(self.data, nodes, rows, cols, edges, self.perm_dict)
-            for node_type, batch_size in sample_counts.items():
-                data[node_type].batch_size = batch_size
-
-            return data
+            return nodes, (rows, cols), sample_counts
