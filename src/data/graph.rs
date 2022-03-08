@@ -150,10 +150,10 @@ impl<Ix: IndexType + Element, Ptr: IndexType + Element> CooGraphBuilder<Ix, Ptr>
     }
 
     pub fn to_tensor(&self) -> (Tensor, Tensor, Tensor) {
-        let cols = Tensor::of_slice(&self.cols);
         let rows = Tensor::of_slice(&self.rows);
+        let cols = Tensor::of_slice(&self.cols);
         let edge_index = Tensor::of_slice(&self.edge_index);
-        (cols, rows, edge_index)
+        (rows, cols, edge_index)
     }
     
     pub fn len(&self) -> usize {

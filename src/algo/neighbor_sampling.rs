@@ -248,6 +248,9 @@ pub fn neighbor_sampling_heterogenous<
     HashMap<RelType, CooGraphBuilder>,
     HashMap<RelType, Vec<LayerOffset>>,
 ) {
+    // TODO: When same nodes occur in the same layer, we should only keep one (therefore reducing workload at nn side)
+    // See: https://i.imgur.com/mFurLy7.png
+
     // Create a mapping to convert single string relations to edge type triplets:
     let mut to_edge_types = HashMap::<RelType, EdgeType>::new();
     for e @ (src_node_type, rel_type, dst_node_type) in edge_types {
