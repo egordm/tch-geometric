@@ -1,4 +1,4 @@
-from typing import Union, List, Dict
+from typing import Union, List, Dict, Optional
 
 import torch
 from torch_geometric.data import Data, HeteroData
@@ -6,8 +6,8 @@ from torch_geometric.loader.utils import filter_hetero_data
 from torch_geometric.typing import NodeType
 
 import tch_geometric.tch_geometric as native
-from tch_geometric.data import to_hetero_csc
-from tch_geometric.types import MixedData, validate_mixeddata
+from tch_geometric.data import to_hetero_csc, to_hetero_sparse_attr
+from tch_geometric.types import MixedData, validate_mixeddata, HeteroTensor, Timerange
 
 
 class HGTSamplerTransform:
@@ -15,15 +15,21 @@ class HGTSamplerTransform:
             self,
             data: Union[Data, HeteroData],
             num_samples: Union[List[int], Dict[NodeType, List[int]]],
+            temporal: bool = False,
     ) -> None:
         super().__init__()
         assert isinstance(data, HeteroData)
 
         self.data = data
         self.num_samples = num_samples
+        self.temporal = temporal
 
         self.col_ptrs_dict, self.row_indices_dict, self.perm_dict, self.size_dict = to_hetero_csc(data)
         self.node_types, self.edge_types = data.metadata()
+
+        if temporal:
+            assert 'timestamps' in data.keys
+            self.row_timestamps_dict = to_hetero_sparse_attr(data, 'timestamps', self.perm_dict)
 
         if isinstance(num_samples, (list, tuple)):
             num_samples = {key: num_samples for key in self.node_types}
@@ -32,7 +38,12 @@ class HGTSamplerTransform:
 
         self.num_hops = max([len(v) for v in self.num_samples.values()])
 
-    def __call__(self, inputs_dict: MixedData) -> Union[Data, HeteroData]:
+    def __call__(
+            self,
+            inputs_dict: HeteroTensor,
+            inputs_timestamps_dict: Optional[HeteroTensor] = None,
+            timerange: Optional[Timerange] = None,
+    ) -> Union[Data, HeteroData]:
         validate_mixeddata(inputs_dict, hetero=True, dtype=torch.int64)
 
         # Correct amount of samples by the batch size
@@ -44,14 +55,17 @@ class HGTSamplerTransform:
 
         # Sample the data
         sample_fn = native.hgt_sampling
-        nodes, rows, cols, edges = sample_fn(
+        nodes, nodes_timestamps, rows, cols, edges = sample_fn(
             self.node_types,
             self.edge_types,
             self.col_ptrs_dict,
             self.row_indices_dict,
+            self.row_timestamps_dict if self.temporal else None,
             inputs_dict,
+            inputs_timestamps_dict if self.temporal else None,
             num_samples,
             self.num_hops,
+            timerange if self.temporal else None,
         )
         batch_size = {key: value.numel() for key, value in inputs_dict.items()}
 
@@ -61,5 +75,11 @@ class HGTSamplerTransform:
         )
         for node_type, batch_size in batch_size.items():
             data[node_type].batch_size = batch_size
+
+        if self.temporal:
+            for store in data.node_stores:
+                node_type = store._key
+                if node_type in nodes_timestamps:
+                    store.timestamps = nodes_timestamps[node_type]
 
         return data

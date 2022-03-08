@@ -52,3 +52,15 @@ def to_hetero_csc(data: HeteroData) \
 def to_hetero_csr(data: HeteroData) \
         -> Tuple[Dict[RelType, Tensor], Dict[RelType, Tensor], Dict[RelType, Tensor], Dict[RelType, Size]]:
     return to_hetero_sparse(data, to_csr)
+
+
+def to_hetero_sparse_attr(data: HeteroData, attr: str, perm_dict: Dict[RelType, Tensor]) \
+        -> Dict[RelType, Tensor]:
+    attr_dict = {}
+    for store in data.edge_stores:
+        key = edge_type_to_str(store._key)
+        if hasattr(store, attr):
+            attr_data = getattr(store, attr)[perm_dict[key]]
+            attr_dict[key] = attr_data
+
+    return attr_dict

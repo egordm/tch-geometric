@@ -48,11 +48,14 @@ def hgt_sampling(
         edge_types: List[EdgeType],
         col_ptrs: Dict[RelType, Tensor],
         row_indices: Dict[RelType, Tensor],
+        row_timestamps: Optional[Dict[RelType, Tensor]],
         inputs: Dict[NodeType, Tensor],
+        input_timestamps: Optional[Dict[NodeType, Tensor]],
         num_samples: Dict[NodeType, List[int]],
         num_hops: int,
+        timerange: Optional[Tuple[float, float]] = None,
 ) -> Tuple[
-    Dict[NodeType, Tensor], Dict[RelType, Tensor], Dict[RelType, Tensor], Dict[RelType, Tensor]
+    Dict[NodeType, Tensor], Dict[NodeType, Tensor], Dict[RelType, Tensor], Dict[RelType, Tensor], Dict[RelType, Tensor]
 ]:
     ...
 

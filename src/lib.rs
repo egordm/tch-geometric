@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 pub mod utils;
 pub mod data;
 pub mod algo;

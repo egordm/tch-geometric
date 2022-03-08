@@ -398,10 +398,14 @@ mod algo {
         edge_types: Vec<EdgeType>,
         col_ptrs: HashMap<RelType, Tensor>,
         row_indices: HashMap<RelType, Tensor>,
+        row_timestamps: Option<HashMap<RelType, Tensor>>,
         inputs: HashMap<NodeType, Tensor>,
+        input_timestamps: Option<HashMap<NodeType, Tensor>>,
         num_samples: HashMap<NodeType, Vec<usize>>,
         num_hops: usize,
+        timerange: Option<(f64, f64)>
     ) -> PyResult<(
+        HashMap<NodeType, Tensor>,
         HashMap<NodeType, Tensor>,
         HashMap<RelType, Tensor>,
         HashMap<RelType, Tensor>,
@@ -414,7 +418,16 @@ mod algo {
         for rel_type in rel_types.iter().cloned() {
             let ptrs = try_tensor_to_slice::<i64>(&col_ptrs[&rel_type])?;
             let indices = try_tensor_to_slice::<i64>(&row_indices[&rel_type])?;
-            graphs.insert(rel_type, CscGraph::new(ptrs, indices));
+            let timestamps = if let Some(ts) = &row_timestamps {
+                if let Some(timestamps) = ts.get(&rel_type) {
+                    Some(EdgeAttr::new(try_tensor_to_slice::<f64>(timestamps)?))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            graphs.insert(rel_type, (CscGraph::new(ptrs, indices), timestamps));
         }
 
         let inputs_data: HashMap<NodeType, &[i64]> = inputs.iter().map(|(node_type, tensor)| {
@@ -422,14 +435,33 @@ mod algo {
             Ok((node_type.clone(), data))
         }).collect::<PyResult<_>>()?;
 
+        let input_timestamps_data: Option<HashMap<NodeType, &[f64]>> = if let Some(input_timestamps) = input_timestamps.as_ref() {
+            Some( input_timestamps.iter().map(|(node_type, tensor)| {
+                let data = try_tensor_to_slice::<f64>(tensor)?;
+                Ok((node_type.clone(), data))
+            }).collect::<PyResult<_>>()?)
+        } else {
+            None
+        };
 
-        let (samples, coo_builders) = crate::algo::hgt_sampling::hgt_sampling(
-            &mut rng, &node_types, &edge_types, &graphs, &inputs_data, &num_samples, num_hops,
+        let timerange = timerange.map(|(start, end)| start..end);
+
+
+        let (samples, samples_timestamps, coo_builders) = crate::algo::hgt_sampling::hgt_sampling(
+            &mut rng, &node_types, &edge_types, &graphs, &inputs_data, input_timestamps_data.as_ref(), &num_samples, num_hops,&timerange
         );
 
         let samples: HashMap<NodeType, Tensor> = samples.into_iter().map(|(ty, samples)| {
             (ty, samples.try_into().expect("Can't convert vec into tensor"))
         }).collect();
+        let samples_timestamps: HashMap<NodeType, Tensor> = samples_timestamps.into_iter().map(|(ty, samples_timestamps)| {
+            let samples_timestamps: Vec<f64> = samples_timestamps
+                .into_iter()
+                .map(|x| x.unwrap_or(f64::NAN))
+                .collect();
+            (ty, samples_timestamps.try_into().expect("Can't convert vec into tensor"))
+        }).collect();
+
         let mut rows = HashMap::new();
         let mut cols = HashMap::new();
         let mut edge_indexes = HashMap::new();
@@ -442,6 +474,7 @@ mod algo {
 
         Ok((
             samples,
+            samples_timestamps,
             rows,
             cols,
             edge_indexes,
@@ -497,7 +530,7 @@ mod algo {
             &mut rng,
             &graph,
             graph_size,
-            &inputs,
+            inputs,
             num_neg,
             try_count,
         );
