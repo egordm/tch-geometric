@@ -2,12 +2,13 @@ use std::collections::HashMap;
 use std::ops::Range;
 use rand::Rng;
 use crate::data::{CooGraphBuilder, CscGraph, EdgeAttr};
-use crate::utils::{EdgePtr, EdgeType, NodeIdx, NodePtr, NodeType, RelType, reservoir_sampling, reservoir_sampling_weighted};
+use crate::utils::{EdgePtr, EdgeType, IndexOpt, NodeIdx, NodePtr, NodeType, RelType, reservoir_sampling, reservoir_sampling_weighted};
 
 type Score = f64;
-type Timestamp = f64;
+pub type Timestamp = i64;
 
 const MAX_NEIGHBORS: usize = 50;
+const NAN_TIMESTAMP: Timestamp = -1;
 
 type NodeBudget = HashMap<NodeIdx, BudgetValue>;
 
@@ -19,7 +20,7 @@ struct BudgetDict {
 #[derive(Debug, Clone, Default)]
 struct BudgetValue {
     score: Score,
-    timestamp: Option<Timestamp>,
+    timestamp: Timestamp,
 }
 
 impl BudgetDict {
@@ -28,7 +29,7 @@ impl BudgetDict {
         rng: &mut impl Rng,
         node_type: &NodeType,
         samples: &[NodeIdx],
-        samples_timestamps: &[Option<Timestamp>],
+        samples_timestamps: &[Timestamp],
         to_local_node_dict: &HashMap<NodeType, HashMap<NodeIdx, NodePtr<usize>>>,
         to_edge_types: &HashMap::<RelType, EdgeType>,
         graphs: &HashMap<RelType, (CscGraph, Option<EdgeAttr<Timestamp>>)>,
@@ -78,16 +79,14 @@ impl BudgetDict {
                     // Line 4: Only add the neighbor in case we have not yet seen/sampled it before:
                     if !to_local_src_node.contains_key(&v) {
                         // Line 5: use source timestamp or inductively inherit from target timestamp
-                        let mut v_timestamp = neigbor_timestamps.map(|ts| ts[*i]).or(w_timestamp);
-                        if let Some(t) = v_timestamp {
-                            if t < 0.0 {
-                                v_timestamp = w_timestamp;
-                            }
+                        let mut v_timestamp = neigbor_timestamps.map(|ts| ts[*i]).unwrap_or(NAN_TIMESTAMP);
+                        if v_timestamp == NAN_TIMESTAMP {
+                            v_timestamp = w_timestamp;
                         }
 
                         // Check whether node is within timerange (if timerange is specified)
-                        if let (Some(v_timestamp), Some(timerange)) = (v_timestamp, timerange) {
-                            if !timerange.contains(&v_timestamp){
+                        if let Some(timerange) = timerange {
+                            if v_timestamp != NAN_TIMESTAMP && !timerange.contains(&v_timestamp) {
                                 continue;
                             }
                         }
@@ -106,7 +105,7 @@ impl BudgetDict {
         rng: &mut impl Rng,
         budget: &NodeBudget,
         num_samples: usize,
-    ) -> (Vec<NodeIdx>, Vec<Option<Timestamp>>) {
+    ) -> (Vec<NodeIdx>, Vec<Timestamp>) {
         let indices = budget.iter()
             .map(|(_, budget)| budget.score * budget.score)
             .enumerate();
@@ -115,7 +114,7 @@ impl BudgetDict {
         let count = reservoir_sampling_weighted(rng, indices, &mut sampled_indices);
 
         let mut nodes: Vec<NodeIdx> = Vec::new();
-        let mut timestamps: Vec<Option<Timestamp>> = Vec::new();
+        let mut timestamps: Vec<Timestamp> = Vec::new();
         nodes.reserve(count);
         timestamps.reserve(count);
 
@@ -148,7 +147,7 @@ pub fn hgt_sampling(
     timerange: &Option<Range<Timestamp>>
 ) -> (
     HashMap<NodeType, Vec<NodeIdx>>,
-    HashMap<NodeType, Vec<Option<Timestamp>>>,
+    HashMap<NodeType, Vec<Timestamp>>,
     HashMap<RelType, CooGraphBuilder>,
     // HashMap<RelType, Vec<LayerOffset>>,
 ) {
@@ -160,7 +159,7 @@ pub fn hgt_sampling(
 
     // Initialize some data structures for the sampling process
     let mut nodes_dict: HashMap<NodeType, Vec<NodeIdx>> = HashMap::new();
-    let mut nodes_timestamps_dict: HashMap<NodeType, Vec<Option<Timestamp>>> = HashMap::new();
+    let mut nodes_timestamps_dict: HashMap<NodeType, Vec<Timestamp>> = HashMap::new();
     let mut to_local_node_dict: HashMap<NodeType, HashMap<NodeIdx, NodePtr<usize>>> = HashMap::new();
     let mut budget_dict: BudgetDict = BudgetDict::default();
 
@@ -175,9 +174,7 @@ pub fn hgt_sampling(
             to_local_node.insert(*v, nodes.len());
             nodes.push(*v);
             nodes_timestamps.push(
-                inputs_timestamps
-                    .map(|ts| ts[i])
-                    .and_then(|ts| if ts.is_nan() { None } else { Some(ts) }),
+                inputs_timestamps.get(&i).cloned().unwrap_or(NAN_TIMESTAMP)
             );
         }
     }
@@ -200,7 +197,7 @@ pub fn hgt_sampling(
 
     for layer in 0..num_hops {
         let mut samples_dict: HashMap<NodeType, Vec<NodeIdx>> = HashMap::new();
-        let mut samples_timestamps_dict: HashMap<NodeType, Vec<Option<Timestamp>>> = HashMap::new();
+        let mut samples_timestamps_dict: HashMap<NodeType, Vec<Timestamp>> = HashMap::new();
         for (node_type, budget) in budget_dict.budget_dict.iter_mut() {
             let num_samples = num_samples[node_type][layer];
 
@@ -271,7 +268,7 @@ pub fn hgt_sampling(
     }
 
     let out_node_dict: HashMap<NodeType, Vec<NodeIdx>> = nodes_dict;
-    let out_node_timestamps_dict: HashMap<NodeType, Vec<Option<Timestamp>>> = nodes_timestamps_dict;
+    let out_node_timestamps_dict: HashMap<NodeType, Vec<Timestamp>> = nodes_timestamps_dict;
 
     (
         out_node_dict,

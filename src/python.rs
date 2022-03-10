@@ -68,6 +68,7 @@ mod algo {
     use rand::distributions::uniform::SampleUniform;
     use tch::kind::Element;
     use tch::Tensor;
+    use crate::algo::hgt_sampling::Timestamp;
     use crate::algo::neighbor_sampling as ns;
     use crate::algo::neighbor_sampling::LayerOffset;
     use crate::data::{CscGraph, CsrGraph, EdgeAttr, CooGraphBuilder, Size};
@@ -403,7 +404,7 @@ mod algo {
         input_timestamps: Option<HashMap<NodeType, Tensor>>,
         num_samples: HashMap<NodeType, Vec<usize>>,
         num_hops: usize,
-        timerange: Option<(f64, f64)>
+        timerange: Option<(Timestamp, Timestamp)>
     ) -> PyResult<(
         HashMap<NodeType, Tensor>,
         HashMap<NodeType, Tensor>,
@@ -420,7 +421,7 @@ mod algo {
             let indices = try_tensor_to_slice::<i64>(&row_indices[&rel_type])?;
             let timestamps = if let Some(ts) = &row_timestamps {
                 if let Some(timestamps) = ts.get(&rel_type) {
-                    Some(EdgeAttr::new(try_tensor_to_slice::<f64>(timestamps)?))
+                    Some(EdgeAttr::new(try_tensor_to_slice::<Timestamp>(timestamps)?))
                 } else {
                     None
                 }
@@ -435,9 +436,9 @@ mod algo {
             Ok((node_type.clone(), data))
         }).collect::<PyResult<_>>()?;
 
-        let input_timestamps_data: Option<HashMap<NodeType, &[f64]>> = if let Some(input_timestamps) = input_timestamps.as_ref() {
+        let input_timestamps_data: Option<HashMap<NodeType, &[Timestamp]>> = if let Some(input_timestamps) = input_timestamps.as_ref() {
             Some( input_timestamps.iter().map(|(node_type, tensor)| {
-                let data = try_tensor_to_slice::<f64>(tensor)?;
+                let data = try_tensor_to_slice::<Timestamp>(tensor)?;
                 Ok((node_type.clone(), data))
             }).collect::<PyResult<_>>()?)
         } else {
@@ -448,17 +449,13 @@ mod algo {
 
 
         let (samples, samples_timestamps, coo_builders) = crate::algo::hgt_sampling::hgt_sampling(
-            &mut rng, &node_types, &edge_types, &graphs, &inputs_data, input_timestamps_data.as_ref(), &num_samples, num_hops,&timerange
+            &mut rng, &node_types, &edge_types, &graphs, &inputs_data, input_timestamps_data.as_ref(), &num_samples, num_hops, &timerange
         );
 
         let samples: HashMap<NodeType, Tensor> = samples.into_iter().map(|(ty, samples)| {
             (ty, samples.try_into().expect("Can't convert vec into tensor"))
         }).collect();
         let samples_timestamps: HashMap<NodeType, Tensor> = samples_timestamps.into_iter().map(|(ty, samples_timestamps)| {
-            let samples_timestamps: Vec<f64> = samples_timestamps
-                .into_iter()
-                .map(|x| x.unwrap_or(f64::NAN))
-                .collect();
             (ty, samples_timestamps.try_into().expect("Can't convert vec into tensor"))
         }).collect();
 

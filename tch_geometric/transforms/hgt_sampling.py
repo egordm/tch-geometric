@@ -9,6 +9,8 @@ import tch_geometric.tch_geometric as native
 from tch_geometric.data import to_hetero_csc, to_hetero_sparse_attr
 from tch_geometric.types import MixedData, validate_mixeddata, HeteroTensor, Timerange
 
+NAN_TIMESTAMP = -1
+NAN_TIMEDELTA = -99999
 
 class HGTSamplerTransform:
     def __init__(
@@ -28,8 +30,8 @@ class HGTSamplerTransform:
         self.node_types, self.edge_types = data.metadata()
 
         if temporal:
-            assert 'timestamps' in data.keys
-            self.row_timestamps_dict = to_hetero_sparse_attr(data, 'timestamps', self.perm_dict)
+            assert 'timestamp' in data.keys
+            self.row_timestamps_dict = to_hetero_sparse_attr(data, 'timestamp', self.perm_dict)
 
         if isinstance(num_samples, (list, tuple)):
             num_samples = {key: num_samples for key in self.node_types}
@@ -80,6 +82,13 @@ class HGTSamplerTransform:
             for store in data.node_stores:
                 node_type = store._key
                 if node_type in nodes_timestamps:
-                    store.timestamps = nodes_timestamps[node_type]
+                    store.timestamp = nodes_timestamps[node_type]
+
+            for store in data.edge_stores:
+                (src, _, dst) = store._key
+                timestamp_src = data[src].timestamp[store.edge_index[0, :]]
+                timestamp_dst = data[dst].timestamp[store.edge_index[1, :]]
+                store.timedelta = timestamp_dst - timestamp_src
+                store.timedelta[torch.logical_or(timestamp_src == NAN_TIMESTAMP, timestamp_dst == NAN_TIMESTAMP)] = NAN_TIMEDELTA
 
         return data

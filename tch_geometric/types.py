@@ -5,7 +5,7 @@ from torch import Tensor
 MixedData = Union[Tensor, Dict[str, Tensor]]
 HeteroTensor = Dict[str, Tensor]
 
-Timerange = Tuple[float, float]
+Timerange = Tuple[int, int]
 
 def validate_mixeddata(data: MixedData, hetero: bool = False, dtype=None):
     if hetero:
