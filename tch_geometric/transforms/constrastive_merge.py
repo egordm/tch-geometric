@@ -27,7 +27,7 @@ class ContrastiveMergeTransform:
 
             neg_edge_store = result[(src, f'{rel}_neg', dst)]
             neg_edge_store.edge_index = neg_store.edge_index
-            neg_edge_store.edge_index[1, :] += nodes_start_neg[src]
+            neg_edge_store.edge_index[1, :] += nodes_start_neg[dst]
             neg_edge_store.type = 'neg'
 
         return result
