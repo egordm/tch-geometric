@@ -1,14 +1,12 @@
 from typing import Union, Tuple
 
 import torch
-from torch import Tensor
 from torch_geometric.data import Data, HeteroData
 
 import tch_geometric.tch_geometric as native
 from tch_geometric.data import to_csc, to_csr, to_hetero_csc, to_hetero_csr
-from tch_geometric.data.subgraph import build_subgraph
+from tch_geometric.data.subgraph import create_subgraph
 from tch_geometric.types import MixedData, validate_mixeddata
-from tch_geometric.utils import zip_dict
 
 
 class NegativeSamplerTransform:
@@ -75,9 +73,9 @@ class NegativeSamplerTransform:
                 inputs,
                 self.num_neg,
                 self.try_count,
+                self.inbound,
             )
 
-            subgraph = build_subgraph(nodes, rows, cols, node_attrs=dict(sample_count=sample_counts))
+            subgraph = create_subgraph(nodes, rows, cols, node_attrs=dict(sample_count=sample_counts))
 
             return subgraph
-            # return nodes, (rows, cols), sample_counts
