@@ -513,7 +513,7 @@ mod algo {
         graph_size: Size,
         inputs: Tensor,
         num_neg: i64,
-        try_count: i64
+        try_count: i64,
     ) -> PyResult<(Tensor, Tensor, Tensor, usize)> {
         let mut rng = random::rng_get();
 
@@ -550,6 +550,7 @@ mod algo {
         inputs: HashMap<NodeType, Tensor>,
         num_neg: i64,
         try_count: i64,
+        inbound: bool,
     ) -> PyResult<(
         HashMap<NodeType, Tensor>,
         HashMap<RelType, Tensor>,
@@ -579,6 +580,7 @@ mod algo {
             &inputs_data,
             num_neg,
             try_count,
+            inbound,
         );
 
         let samples: HashMap<NodeType, Tensor> = samples.into_iter().map(|(ty, samples)| {

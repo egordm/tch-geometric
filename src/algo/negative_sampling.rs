@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use rand::{Rng};
-use crate::data::{CooGraphBuilder, CsrGraph};
+use crate::data::{CooGraphBuilder, CsrGraph, SparseGraph, SparseGraphType, SparseGraphTypeTrait};
 use crate::utils::{EdgeType, NodeIdx, NodePtr, NodeType, RelType};
 
 pub fn negative_sample_neighbors_homogenous(
@@ -55,6 +55,7 @@ pub fn negative_sample_neighbors_heterogenous(
     inputs: &HashMap<NodeType, &[NodeIdx]>,
     num_neg: i64,
     try_count: i64,
+    inbound: bool,
 ) -> (
     HashMap<NodeType, Vec<NodeIdx>>,
     HashMap<RelType, CooGraphBuilder>,
@@ -101,14 +102,19 @@ pub fn negative_sample_neighbors_heterogenous(
         for (i, &v) in inputs.iter().enumerate() {
             for _ in 0..num_neg {
                 let (rel_type, dst_type) = &node_rels[rng.gen_range(0..node_rels.len())];
-                let (graph, (_, node_count)) = &graphs[rel_type];
+                let (graph, (src_node_count, node_count)) = &graphs[rel_type];
                 let samples_mapping = samples_mapping.get_mut(dst_type).unwrap();
                 let samples = samples.get_mut(dst_type).unwrap();
                 let edge_index = edge_index.get_mut(rel_type).unwrap();
 
                 for _t in 0..try_count {
                     let w = rng.gen_range(0..*node_count);
-                    if !graph.has_edge(v, w) && v != w {
+                    let has_edge = match inbound {
+                        true => graph.has_edge(w, v),
+                        false => graph.has_edge(v, w),
+                    };
+
+                    if !has_edge && v != w {
                         let j = *samples_mapping.entry(w).or_insert_with(|| {
                             samples.push(w);
                             samples.len() - 1

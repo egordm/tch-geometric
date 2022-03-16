@@ -91,6 +91,7 @@ def negative_sample_neighbors_heterogenous(
         inputs: Dict[NodeType, Tensor],
         num_neg: int,
         try_count: int,
+        inbound: bool,
 ) -> Tuple[
     Dict[NodeType, Tensor], Dict[RelType, Tensor], Dict[RelType, Tensor], Dict[NodeType, int]
 ]:
