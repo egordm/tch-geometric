@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::ops::Range;
+use std::ops::{Neg, Range};
 use rand::Rng;
 use crate::algo::neighbor_sampling::{LayerOffset, SamplingFilter};
 use crate::data::{CooGraphBuilder, CscGraph, EdgeAttr};
@@ -9,6 +9,33 @@ pub type Timestamp = i64;
 
 const MAX_NEIGHBORS: usize = 50;
 const NAN_TIMESTAMP: Timestamp = -1;
+
+pub struct TemporalFilter {
+    window: Range<Timestamp>,
+    forward: bool,
+    relative: bool,
+}
+
+impl TemporalFilter {
+    pub fn filter(&self, state: Timestamp, t: Timestamp) -> bool {
+        if state == NAN_TIMESTAMP || t == NAN_TIMESTAMP {
+            return true;
+        }
+
+        match self.forward {
+            true => self.window.contains(&(t - state)),
+            false => self.window.contains(&(t - state).neg()),
+        }
+    }
+
+    pub fn mutate(&self, state: Timestamp, t: Timestamp) -> Timestamp {
+        if self.relative {
+            state // Relative to the root node
+        } else {
+            t // Dynamic or relative to the previous node
+        }
+    }
+}
 
 #[derive(Clone)]
 struct BudgetValue {
@@ -39,7 +66,7 @@ impl Budget {
         nodes_timestamps: &[Timestamp],
         to_edge_types: &HashMap<RelType, EdgeType>,
         graphs: &HashMap<RelType, (CscGraph, Option<EdgeAttr<Timestamp>>)>,
-        window: &Option<Range<Timestamp>>,
+        filter: &Option<TemporalFilter>,
     ) -> Vec<Budget> {
         if nodes.is_empty() {
             return Vec::new();
@@ -76,18 +103,19 @@ impl Budget {
                         v_t = w_t;
                     }
 
-                    // TODO: add relative windowing here (instead of absolute)
-                    // if let Some(window) = window {
-                    //     if v_t != NAN_TIMESTAMP && !window.contains(&v_t) {
-                    //         continue;
-                    //     }
-                    // }
+                    if let Some(filter) = filter {
+                        if !filter.filter(w_t, v_t) {
+                            continue;
+                        }
+                    }
 
                     let budget = w_budget.data.entry((src.clone(), v)).or_default();
                     let admit = if budget.edge.2 > 0 { rng.gen_range(0..budget.edge.2) } else { 0 };
                     if admit < 1 { // Reservoir sample the parallel edge
                         budget.edge = (rel_type.clone(), *i as EdgePtr, budget.edge.2 + 1);
-                        budget.timestamp = v_t;
+                        budget.timestamp = filter.as_ref()
+                            .map(|f| f.mutate(w_t, v_t))
+                            .unwrap_or(v_t);
                     }
                 }
             }
@@ -130,9 +158,10 @@ pub fn budget_neighbor_sampling_heterogenous(
     inputs_timestamps: &HashMap<NodeType, &[Timestamp]>,
     num_neighbors: &HashMap<NodeType, Vec<usize>>,
     num_hops: usize,
-    window: &Option<Range<Timestamp>>,
+    filter: &Option<TemporalFilter>,
 ) -> (
     HashMap<NodeType, Vec<NodeIdx>>,
+    HashMap<NodeType, Vec<Timestamp>>,
     HashMap<RelType, CooGraphBuilder>,
     HashMap<RelType, Vec<LayerOffset>>,
 ) {
@@ -179,7 +208,7 @@ pub fn budget_neighbor_sampling_heterogenous(
     for (node_type, nodes) in samples.iter() {
         let type_budgets = Budget::update(
             rng, node_type, nodes, &samples_timestamps[node_type],
-            &to_edge_types, graphs, &None, // TODO: specify timerange
+            &to_edge_types, graphs, filter,
         );
 
         budgets.insert(node_type.clone(), type_budgets);
@@ -214,7 +243,7 @@ pub fn budget_neighbor_sampling_heterogenous(
                 let (begin, end) = slices[node_type];
                 let type_budgets = Budget::update(
                     rng, node_type, &nodes[begin..end], &samples_timestamps[node_type][begin..end],
-                    &to_edge_types, graphs, &None, // TODO: specify timerange
+                    &to_edge_types, graphs, filter,
                 );
 
                 budgets.insert(node_type.clone(), type_budgets);
@@ -224,6 +253,7 @@ pub fn budget_neighbor_sampling_heterogenous(
 
     (
         samples,
+        samples_timestamps,
         edge_index,
         layer_offsets,
     )
@@ -232,14 +262,17 @@ pub fn budget_neighbor_sampling_heterogenous(
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
     use std::collections::{HashMap, VecDeque};
     use std::convert::TryFrom;
+    use std::rc::{Rc, Weak};
     use rand::{Rng, SeedableRng};
+    use crate::algo::budget_sampling::TemporalFilter;
     use crate::algo::hgt_sampling::Timestamp;
-    use crate::algo::neighbor_sampling::{IdentityFilter, LayerOffset, SamplingFilter, TemporalFilter, UnweightedSampler, WeightedSampler};
+    use crate::algo::neighbor_sampling::{IdentityFilter, LayerOffset, WeightedSampler};
     use crate::data::{CscGraph, CscGraphStorage, EdgeAttr, CooGraphBuilder};
     use crate::data::{load_fake_hetero_graph, load_karate_graph};
-    use crate::utils::{EdgeType, NodeIdx, NodeType, RelType};
+    use crate::utils::{EdgeType, NodeIdx, NodePtr, NodeType, RelType};
 
     pub fn validate_neighbor_samples(
         graph: &CscGraph<i64, i64>,
@@ -308,6 +341,58 @@ mod tests {
         paths.into()
     }
 
+
+    type HeteroPathNode = (NodeType, NodePtr);
+
+    struct LinkedNode {
+        next: Option<Rc<RefCell<LinkedNode>>>,
+        data: HeteroPathNode,
+        tail: bool,
+    }
+
+    pub fn samples_to_heteropaths(
+        nodes: &HashMap<NodeType, Vec<NodeIdx>>,
+        edges: &HashMap<RelType, CooGraphBuilder>,
+        edge_types: &HashMap<RelType, EdgeType>,
+    ) -> Vec<Vec<HeteroPathNode>> {
+        let mut segments: HashMap<(NodeType, NodePtr), Rc<RefCell<LinkedNode>>> = HashMap::new();
+        for (node_type, nodes) in nodes {
+            for (i, n) in nodes.iter().enumerate() {
+                let segment = LinkedNode {
+                    next: None,
+                    data: (node_type.clone(), i as NodePtr),
+                    tail: true,
+                };
+                segments.insert((node_type.clone(), i as NodePtr), Rc::new(RefCell::new(segment)));
+            }
+        }
+
+        for (rel_type, coo_builder) in edges {
+            let (src, _, dst) = &edge_types[rel_type];
+            for (i, j) in coo_builder.iter_edges() {
+                let source = &segments[&(src.clone(), i as NodePtr)];
+                let target = &segments[&(dst.clone(), j as NodePtr)];
+                target.borrow_mut().tail = false;
+                source.borrow_mut().next = Some(Rc::clone(&target));
+            }
+        }
+
+        let mut results = Vec::new();
+        for (_, segment) in segments {
+            if !segment.borrow().tail { continue; }
+
+            let mut path = VecDeque::new();
+            let mut curr = Some(segment);
+            while let Some(segment) = curr {
+                path.push_front(segment.borrow().data.clone());
+                curr = segment.borrow().next.clone();
+            }
+            results.push(path.iter().cloned().collect());
+        }
+
+        results
+    }
+
     #[test]
     pub fn test_neighbor_sampling_heterogenous() {
         let (xs, coo_graphs) = load_fake_hetero_graph();
@@ -322,13 +407,17 @@ mod tests {
             to_edge_types.insert(format!("{}__{}__{}", src_node_type, rel_type, dst_node_type), e.clone());
         }
 
-        let graph_data: HashMap<RelType, CscGraphStorage> = coo_graphs.iter().map(|((src, rel, dst), coo_graph)| {
+
+
+        let graph_data: HashMap<RelType, (CscGraphStorage, _)> = coo_graphs.iter().map(|((src, rel, dst), coo_graph)| {
             let graph_data = CscGraphStorage::try_from(coo_graph).unwrap();
-            (format!("{}__{}__{}", src, rel, dst), graph_data)
+            let timestamps: Vec<Timestamp> = (0..graph_data.indices.numel()).map(|_| rng.gen_range(0..7)).collect();
+            (format!("{}__{}__{}", src, rel, dst), (graph_data, timestamps))
         }).collect();
-        let graphs: HashMap<RelType, (CscGraph, _)> = graph_data.iter().map(|(rel_type, graph_data)| {
+        let graphs: HashMap<RelType, (CscGraph, _)> = graph_data.iter().map(|(rel_type, (graph_data, timestamps))| {
             let graph = CscGraph::<i64, i64>::try_from(graph_data).unwrap();
-            (rel_type.clone(), (graph, None))
+            let timestamps_attr = EdgeAttr::new(timestamps);
+            (rel_type.clone(), (graph, Some(timestamps_attr)))
         }).collect();
 
         let rel_types: Vec<RelType> = graphs.keys().cloned().collect();
@@ -340,26 +429,30 @@ mod tests {
             (node_type.clone(), &inputs[..])
         }).collect();
 
-        let inputs_state_data: HashMap<NodeType, Vec<<IdentityFilter as SamplingFilter>::State>> = inputs.iter().map(|(node_type, inputs)| {
-            (node_type.clone(), vec![(); inputs.len()])
-        }).collect();
-        let inputs_state: HashMap<NodeType, &[<IdentityFilter as SamplingFilter>::State]> = inputs_state_data.iter().map(|(node_type, input_state)| {
-            (node_type.clone(), &input_state[..])
-        }).collect();
-
         let inputs_timestamp_data: HashMap<NodeType, Vec<Timestamp>> = inputs.iter().map(|(node_type, inputs)| {
-            (node_type.clone(), vec![0; inputs.len()])
+            let mut timestamps = Vec::with_capacity(inputs.len());
+            for _ in 0..inputs.len() {
+                timestamps.push(rng.gen_range(0..7));
+            }
+            (node_type.clone(), timestamps)
         }).collect();
         let inputs_timestamp: HashMap<NodeType, &[Timestamp]> = inputs_timestamp_data.iter().map(|(node_type, input_state)| {
             (node_type.clone(), &input_state[..])
         }).collect();
 
         let num_neighbors: HashMap<NodeType, Vec<usize>> = node_types.iter().cloned().map(|node_types| {
-            (node_types, vec![20, 15])
+            (node_types, vec![3, 4])
         }).collect();
         let num_hops = 2;
+        let filter = TemporalFilter {
+            window: 0..2,
+            forward: false,
+            relative: false,
+        };
 
-        let (samples, coo_builders, layer_offsets) = super::budget_neighbor_sampling_heterogenous(
+        let (
+            samples, samples_timestamps, edges, layer_offsets
+        ) = super::budget_neighbor_sampling_heterogenous(
             &mut rng,
             &node_types,
             &edge_types,
@@ -368,25 +461,37 @@ mod tests {
             &inputs_timestamp,
             &num_neighbors,
             num_hops,
-            &None
+            &Some(filter)
         );
 
-        let graphs: HashMap<RelType, CscGraph> = graph_data.iter().map(|(rel_type, graph_data)| {
+        let graphs: HashMap<RelType, CscGraph> = graph_data.iter().map(|(rel_type, (graph_data, _))| {
             let graph = CscGraph::<i64, i64>::try_from(graph_data).unwrap();
             (rel_type.clone(), (graph))
         }).collect();
 
-        for rel_type in coo_builders.keys() {
+        for rel_type in edges.keys() {
             let (src_node_type, _, dst_node_type) = &to_edge_types[rel_type];
 
             validate_neighbor_samples(
                 &graphs[rel_type],
-                &coo_builders[rel_type],
+                &edges[rel_type],
                 &samples[src_node_type],
                 &samples[dst_node_type],
                 &layer_offsets[rel_type],
                 &num_neighbors[src_node_type],
             );
         }
+
+        let paths = samples_to_heteropaths(&samples, &edges, &to_edge_types);
+        for path in paths.iter() {
+            let head = &path[0];
+            let head_in_inputs = (head.1 as usize) < inputs[&head.0].len();
+            assert!(head_in_inputs);
+        }
+
+        let path_timestamps: Vec<Vec<Timestamp>> = paths.iter().map(|path| {
+            path.iter().map(|node| samples_timestamps[&node.0][node.1 as usize]).collect()
+        }).collect();
+        let u = 0;
     }
 }
