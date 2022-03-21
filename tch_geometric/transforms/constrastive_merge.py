@@ -44,7 +44,7 @@ class EdgeTypeAggregateTransform:
         result = HeteroData()
         node_type_default = 'n'
 
-
+        # Merge all nodes into a single tensor while preserving the type specific offsets
         offset = 0
         node_offsets = {}
         xs = []
@@ -55,6 +55,7 @@ class EdgeTypeAggregateTransform:
             offset += store.num_nodes
         result[node_type_default].x = torch.cat(xs, dim=0)
 
+        # Merge all edges into a single tensor and correct edges with correct node offsets
         edge_indexes_dict = defaultdict(list)
         for store in data.edge_stores:
             (src, _, dst) = store._key

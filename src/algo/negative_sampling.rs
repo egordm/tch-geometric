@@ -217,6 +217,7 @@ mod tests {
             &inputs,
             3,
             10,
+            false,
         );
 
         for (rel_type, edge_index) in edge_index {

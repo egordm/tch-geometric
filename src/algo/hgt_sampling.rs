@@ -315,6 +315,8 @@ mod tests {
         for i in 0..5 {
             assert!((0..=20).contains(&counts[i as usize]));
         }
+
+        let u = 0;
     }
 
     pub fn samples_to_paths(
