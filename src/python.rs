@@ -479,6 +479,105 @@ mod algo {
 
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[pyfunction]
+    pub fn budget_sampling(
+        node_types: Vec<NodeType>,
+        edge_types: Vec<EdgeType>,
+        col_ptrs: HashMap<RelType, Tensor>,
+        row_indices: HashMap<RelType, Tensor>,
+        row_timestamps: Option<HashMap<RelType, Tensor>>,
+        inputs: HashMap<NodeType, Tensor>,
+        input_timestamps: Option<HashMap<NodeType, Tensor>>,
+        num_neighbors: HashMap<NodeType, Vec<usize>>,
+        num_hops: usize,
+        window: Option<(Timestamp, Timestamp)>,
+        forward: bool,
+        relative: bool,
+    ) -> PyResult<(
+        HashMap<NodeType, Tensor>,
+        HashMap<NodeType, Tensor>,
+        HashMap<RelType, Tensor>,
+        HashMap<RelType, Tensor>,
+        HashMap<RelType, Tensor>,
+    )> {
+        let mut rng = random::rng_get();
+
+        let rel_types = col_ptrs.keys().cloned().collect::<Vec<_>>();
+        let mut graphs = HashMap::new();
+        for rel_type in rel_types.iter().cloned() {
+            let ptrs = try_tensor_to_slice::<i64>(&col_ptrs[&rel_type])?;
+            let indices = try_tensor_to_slice::<i64>(&row_indices[&rel_type])?;
+            let timestamps = if let Some(ts) = &row_timestamps {
+                if let Some(timestamps) = ts.get(&rel_type) {
+                    Some(EdgeAttr::new(try_tensor_to_slice::<Timestamp>(timestamps)?))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            graphs.insert(rel_type, (CscGraph::new(ptrs, indices), timestamps));
+        }
+
+        let inputs_data: HashMap<NodeType, &[i64]> = inputs.iter().map(|(node_type, tensor)| {
+            let data = try_tensor_to_slice::<i64>(tensor)?;
+            Ok((node_type.clone(), data))
+        }).collect::<PyResult<_>>()?;
+
+        let input_timestamps_data: Option<HashMap<NodeType, &[Timestamp]>> = if let Some(input_timestamps) = input_timestamps.as_ref() {
+            Some( input_timestamps.iter().map(|(node_type, tensor)| {
+                let data = try_tensor_to_slice::<Timestamp>(tensor)?;
+                Ok((node_type.clone(), data))
+            }).collect::<PyResult<_>>()?)
+        } else {
+            None
+        };
+
+        let filter = if let Some((start, end)) = window {
+            Some(crate::algo::budget_sampling::TemporalFilter {
+                window: start..end,
+                forward,
+                relative,
+            })
+        } else {
+            None
+        };
+
+        let (
+            samples, samples_timestamps, coo_builders, layer_offsets
+        ) = crate::algo::budget_sampling::budget_neighbor_sampling_heterogenous(
+            &mut rng, &node_types, &edge_types, &graphs,
+            &inputs_data, input_timestamps_data.as_ref(),
+            &num_neighbors, num_hops, &filter
+        );
+
+        let samples: HashMap<NodeType, Tensor> = samples.into_iter().map(|(ty, samples)| {
+            (ty, samples.try_into().expect("Can't convert vec into tensor"))
+        }).collect();
+        let samples_timestamps: HashMap<NodeType, Tensor> = samples_timestamps.into_iter().map(|(ty, samples_timestamps)| {
+            (ty, samples_timestamps.try_into().expect("Can't convert vec into tensor"))
+        }).collect();
+
+        let mut rows = HashMap::new();
+        let mut cols = HashMap::new();
+        let mut edge_indexes = HashMap::new();
+        for (rel_type, coo_builder) in coo_builders.into_iter() {
+            let (row, col, edge_index) = coo_builder.to_tensor();
+            rows.insert(rel_type.clone(), row);
+            cols.insert(rel_type.clone(), col);
+            edge_indexes.insert(rel_type.clone(), edge_index);
+        }
+
+        Ok((
+            samples,
+            samples_timestamps,
+            rows,
+            cols,
+            edge_indexes,
+        ))
+    }
+
     #[pyfunction]
     pub fn random_walk(
         row_ptrs: Tensor,
@@ -606,6 +705,7 @@ mod algo {
         m.add_function(wrap_pyfunction!(neighbor_sampling_homogenous, m)?)?;
         m.add_function(wrap_pyfunction!(neighbor_sampling_heterogenous, m)?)?;
         m.add_function(wrap_pyfunction!(hgt_sampling, m)?)?;
+        m.add_function(wrap_pyfunction!(budget_sampling, m)?)?;
         m.add_function(wrap_pyfunction!(random_walk, m)?)?;
         m.add_function(wrap_pyfunction!(negative_sample_neighbors_homogenous, m)?)?;
         m.add_function(wrap_pyfunction!(negative_sample_neighbors_heterogenous, m)?)?;

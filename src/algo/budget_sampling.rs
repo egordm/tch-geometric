@@ -11,9 +11,9 @@ const MAX_NEIGHBORS: usize = 50;
 const NAN_TIMESTAMP: Timestamp = -1;
 
 pub struct TemporalFilter {
-    window: Range<Timestamp>,
-    forward: bool,
-    relative: bool,
+    pub window: Range<Timestamp>,
+    pub forward: bool,
+    pub relative: bool,
 }
 
 impl TemporalFilter {
@@ -155,7 +155,7 @@ pub fn budget_neighbor_sampling_heterogenous(
     edge_types: &[EdgeType],
     graphs: &HashMap<RelType, (CscGraph, Option<EdgeAttr<Timestamp>>)>,
     inputs: &HashMap<NodeType, &[NodeIdx]>,
-    inputs_timestamps: &HashMap<NodeType, &[Timestamp]>,
+    inputs_timestamps: Option<&HashMap<NodeType, &[Timestamp]>>,
     num_neighbors: &HashMap<NodeType, Vec<usize>>,
     num_hops: usize,
     filter: &Option<TemporalFilter>,
@@ -186,8 +186,10 @@ pub fn budget_neighbor_sampling_heterogenous(
         let samples_timestamps = samples_timestamps
             .entry(node_type.clone())
             .or_insert_with(Vec::new);
-        if let Some(inputs_state) = inputs_timestamps.get(node_type) {
+        if let Some(inputs_state) = inputs_timestamps.and_then(|it| it.get(node_type)) {
             samples_timestamps.extend_from_slice(inputs_state);
+        } else {
+            samples_timestamps.resize(samples.len(), NAN_TIMESTAMP);
         }
     }
 
@@ -407,8 +409,6 @@ mod tests {
             to_edge_types.insert(format!("{}__{}__{}", src_node_type, rel_type, dst_node_type), e.clone());
         }
 
-
-
         let graph_data: HashMap<RelType, (CscGraphStorage, _)> = coo_graphs.iter().map(|((src, rel, dst), coo_graph)| {
             let graph_data = CscGraphStorage::try_from(coo_graph).unwrap();
             let timestamps: Vec<Timestamp> = (0..graph_data.indices.numel()).map(|_| rng.gen_range(0..7)).collect();
@@ -458,7 +458,7 @@ mod tests {
             &edge_types,
             &graphs,
             &inputs,
-            &inputs_timestamp,
+            Some(&inputs_timestamp),
             &num_neighbors,
             num_hops,
             &Some(filter)
