@@ -798,8 +798,8 @@ dependencies = [
 
 [[package]]
 name = "tch"
-version = "0.6.1"
-source = "git+https://github.com/EgorDm/tch-rs.git#a0c127ced3d14b830ffbf70ac9685460b223c776"
+version = "0.7.0"
+source = "git+https://github.com/EgorDm/tch-rs.git?branch=main#31b26f86e79c5495c56713e1ae829836156546e0"
 dependencies = [
  "half",
  "lazy_static",
@@ -878,8 +878,8 @@ dependencies = [
 
 [[package]]
 name = "torch-sys"
-version = "0.6.1"
-source = "git+https://github.com/EgorDm/tch-rs.git#a0c127ced3d14b830ffbf70ac9685460b223c776"
+version = "0.7.0"
+source = "git+https://github.com/EgorDm/tch-rs.git?branch=main#31b26f86e79c5495c56713e1ae829836156546e0"
 dependencies = [
  "anyhow",
  "cc",

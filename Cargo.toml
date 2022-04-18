@@ -13,7 +13,7 @@ thiserror = "1.0"
 rayon = "1.5.1"
 num-traits = "0.2"
 rand = { version = "0.8.5", features = ["small_rng"], default-features = false }
-tch = { git = "https://github.com/EgorDm/tch-rs.git", default-features = false }
+tch = { git = "https://github.com/EgorDm/tch-rs.git", branch="main", default-features = false }
 lazy_static = { version = "1.4.0" }
 pyo3 = { version = "0.15.1", optional = true }
 

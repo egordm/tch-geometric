@@ -39,14 +39,16 @@ impl TemporalFilter {
 
 #[derive(Clone)]
 struct BudgetValue {
-    edge: (RelType, EdgePtr, usize),
+    node: (NodeType, NodeIdx),
+    edge: (RelType, EdgePtr),
     timestamp: Timestamp,
 }
 
 impl Default for BudgetValue {
     fn default() -> Self {
         Self {
-            edge: ("".to_string(), 0, 0), // TODO: make this ints
+            node: ("".to_string(), 0),
+            edge: ("".to_string(), 0), // TODO: make this ints
             timestamp: NAN_TIMESTAMP,
         }
     }
@@ -55,7 +57,7 @@ impl Default for BudgetValue {
 
 #[derive(Default, Clone)]
 struct Budget {
-    data: HashMap<(NodeType, NodeIdx), BudgetValue>, // TODO: Make node type an int
+    data: Vec<BudgetValue>, // TODO: Make node type an int
 }
 
 impl Budget {
@@ -109,14 +111,13 @@ impl Budget {
                         }
                     }
 
-                    let budget = w_budget.data.entry((src.clone(), v)).or_default();
-                    let admit = if budget.edge.2 > 0 { rng.gen_range(0..budget.edge.2) } else { 0 };
-                    if admit < 1 { // Reservoir sample the parallel edge
-                        budget.edge = (rel_type.clone(), *i as EdgePtr, budget.edge.2 + 1);
-                        budget.timestamp = filter.as_ref()
+                    w_budget.data.push(BudgetValue {
+                        node: (src.clone(), v),
+                        edge: (rel_type.clone(), *i as EdgePtr),
+                        timestamp: filter.as_ref()
                             .map(|f| f.mutate(w_t, v_t))
-                            .unwrap_or(v_t);
-                    }
+                            .unwrap_or(v_t),
+                    });
                 }
             }
         }
@@ -136,10 +137,12 @@ impl Budget {
         let mut idx = vec![0_usize; num_samples];
         let sample_count = reservoir_sampling(rng, 0..budget.data.len(), &mut idx);
 
-        for (_, ((node_type, v), bv)) in budget.data
-            .iter().enumerate()
-            .filter(|(id, _)| idx[..sample_count].contains(id)) {
-            let BudgetValue { edge: (rel_type, edge_ptr, _), timestamp } = bv;
+        for id in idx[..sample_count].iter() {
+            let BudgetValue {
+                node: (node_type, v),
+                edge: (rel_type, edge_ptr),
+                timestamp
+            } = &budget.data[*id];
 
             let i = nodes[node_type].len() as NodePtr;
             nodes.get_mut(node_type).unwrap().push(*v);
