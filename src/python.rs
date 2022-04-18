@@ -606,6 +606,40 @@ mod algo {
     }
 
     #[pyfunction]
+    pub fn tempo_random_walk(
+        row_ptrs: Tensor,
+        col_indices: Tensor,
+        node_timestamps: Tensor,
+        edge_timestamps: Tensor,
+        start: Tensor,
+        start_timestamps: Tensor,
+        walk_length: i64,
+        window: (i64, i64)
+    ) -> PyResult<(Tensor, Tensor)> {
+        let mut rng = random::rng_get();
+
+        let ptrs = try_tensor_to_slice::<i64>(&row_ptrs)?;
+        let indices = try_tensor_to_slice::<i64>(&col_indices)?;
+        let graph = CsrGraph::new(ptrs, indices);
+
+        let node_timestamps_data = try_tensor_to_slice::<i64>(&node_timestamps)?;
+        let edge_timestamps_data = try_tensor_to_slice::<i64>(&edge_timestamps)?;
+
+        let (walks, walk_timestamps) = crate::algo::random_walk::tempo_random_walk(
+            &mut rng,
+            &graph,
+            &node_timestamps_data,
+            &EdgeAttr::new(&edge_timestamps_data),
+            &start,
+            &start_timestamps,
+            walk_length,
+            window,
+        )?;
+
+        Ok((walks, walk_timestamps))
+    }
+
+    #[pyfunction]
     pub fn negative_sample_neighbors_homogenous(
         row_ptrs: Tensor,
         col_indices: Tensor,
@@ -707,6 +741,7 @@ mod algo {
         m.add_function(wrap_pyfunction!(hgt_sampling, m)?)?;
         m.add_function(wrap_pyfunction!(budget_sampling, m)?)?;
         m.add_function(wrap_pyfunction!(random_walk, m)?)?;
+        m.add_function(wrap_pyfunction!(tempo_random_walk, m)?)?;
         m.add_function(wrap_pyfunction!(negative_sample_neighbors_homogenous, m)?)?;
         m.add_function(wrap_pyfunction!(negative_sample_neighbors_heterogenous, m)?)?;
         Ok(())
