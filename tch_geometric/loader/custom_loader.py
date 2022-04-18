@@ -3,6 +3,26 @@ from typing import Callable
 
 from torch.utils.data import Dataset, RandomSampler, SequentialSampler, BatchSampler, DataLoader
 from torch_geometric.loader.base import BaseDataLoader
+from pytorch_lightning.trainer.connectors.data_connector import DataConnector
+from pytorch_lightning.utilities import data
+
+def _is_dataloader_shuffled(dataloader: DataLoader):
+    return (
+        hasattr(dataloader, "sampler")
+        and not ( # Added this condition
+            isinstance(dataloader.sampler, BatchSampler) and
+            isinstance(dataloader.sampler.sampler, SequentialSampler),
+        )
+    )
+
+# I am going insane from this warning. It's a false positive. Therefore we monkey patch it.
+_check_eval_shuffling_og = DataConnector._check_eval_shuffling
+def _check_eval_shuffling(cls, dataloader, mode):
+    if not _is_dataloader_shuffled(dataloader):
+        return
+
+    _check_eval_shuffling_og(dataloader, mode)
+DataConnector._check_eval_shuffling = _check_eval_shuffling
 
 
 class CustomLoader(BaseDataLoader):
