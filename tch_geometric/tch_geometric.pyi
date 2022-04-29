@@ -104,6 +104,21 @@ def tempo_random_walk(
     ...
 
 
+def biased_tempo_random_walk(
+        row_ptrs: Tensor,
+        col_indices: Tensor,
+        node_timestamps: Tensor,
+        edge_timestamps: Tensor,
+        start: Tensor,
+        start_timestamps: Tensor,
+        walk_length: int,
+        walk_bias: str,
+        forward: bool,
+        retry_count: int,
+) -> Tuple[Tensor, Tensor]:
+    ...
+
+
 def negative_sample_neighbors_homogenous(
         row_ptrs: Tensor,
         col_indices: Tensor,

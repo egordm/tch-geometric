@@ -3,7 +3,7 @@ use rand::rngs::SmallRng;
 use tch::{Kind, Scalar, Tensor};
 use crate::data::EdgeAttr;
 use crate::data::graph::CsrGraph;
-use crate::utils::reservoir_sampling;
+use crate::utils::{DefaultIx, reservoir_sampling, reservoir_sampling_weighted};
 use crate::utils::tensor::{TensorResult, try_tensor_to_slice, try_tensor_to_slice_mut};
 
 #[allow(non_snake_case)]
@@ -157,12 +157,143 @@ pub fn tempo_random_walk(
     Ok((walks, walks_timestamps))
 }
 
+pub enum BiasType {
+    Uniform,
+    Linear,
+    Exponential,
+}
+
+impl BiasType {
+    pub fn apply(&self, times: &Tensor, t: i64, forward: bool) -> Tensor {
+        match self {
+            BiasType::Uniform => Tensor::ones(&times.size(), (Kind::Float, times.device())),
+            BiasType::Linear => {
+                let num = times.argsort(0, true).totype(Kind::Float);
+                let den = num.sum(Kind::Float);
+                return num / den;
+            }
+            BiasType::Exponential => {
+                let decay = forward;
+                let delta = if decay { t - times } else { times - t };
+                return delta.softmax(0, Kind::Float);
+            }
+        }
+    }
+}
+
+#[allow(non_snake_case)]
+pub fn biased_tempo_random_walk(
+    rng: &mut SmallRng,
+    graph: &CsrGraph,
+    node_timestamps: &[i64],
+    edge_timestamps: &EdgeAttr<i64>,
+    start: &Tensor,
+    start_timestamps: &Tensor,
+    walk_length: i64,
+    walk_bias: BiasType,
+    forward: bool,
+    retry_count: i64,
+) -> TensorResult<(Tensor, Tensor)> {
+    let L = walk_length as usize;
+    let mut walks = Tensor::full(
+        &[start.size()[0], L as i64],
+        Scalar::from(-1_i64),
+        (Kind::Int64, start.device()),
+    );
+    let mut walks_timestamps = Tensor::full(
+        &[start.size()[0], L as i64],
+        Scalar::from(-1_i64),
+        (Kind::Int64, start.device()),
+    );
+
+    let start_data = try_tensor_to_slice::<i64>(start)?;
+    let start_timestamps = try_tensor_to_slice::<i64>(start_timestamps)?;
+
+    let walks_data = try_tensor_to_slice_mut::<i64>(&mut walks)?;
+    let walks_timestamps_data = try_tensor_to_slice_mut::<i64>(&mut walks_timestamps)?;
+
+    for (i, n) in start_data.iter().enumerate() {
+        'walk_loop: for _ in 0..retry_count {
+            let mut cur = *n;
+            let mut cur_timestamp = start_timestamps[i];
+
+            walks_data[i * L] = cur;
+            walks_timestamps_data[i * L] = cur_timestamp;
+            for l in 0..(walk_length - 1) as usize {
+                walks_data[i * L + l + 1] = -1;
+            }
+
+            for l in 0..(walk_length - 1) as usize {
+                let neighbors_iter = edge_timestamps.get_range(graph.neighbors_range(cur)).into_iter()
+                    .zip(graph.neighbors_slice(cur))
+                    .map(|(&edge_timestamp, &node_idx)| {
+                        let node_timestamp = if edge_timestamp != NAN_TIMESTAMP {
+                            edge_timestamp
+                        } else {
+                            node_timestamps[node_idx as usize]
+                        };
+
+                        (node_timestamp, node_idx)
+                    })
+                    .filter(|(node_timestamp, node_idx)| {
+                        if *node_timestamp == NAN_TIMESTAMP || cur_timestamp == NAN_TIMESTAMP {
+                            return true;
+                        }
+
+                        if cur_timestamp <= *node_timestamp {
+                            return true;
+                        }
+
+                        return false;
+                    });
+
+                let mut times = Vec::new();
+                for (node_timestamp, _) in neighbors_iter.clone() {
+                    times.push(if node_timestamp == NAN_TIMESTAMP { cur_timestamp } else { node_timestamp } as i32);
+                }
+                let times = Tensor::from(&times[..]);
+                let weights = if cur_timestamp == NAN_TIMESTAMP {
+                    BiasType::Uniform.apply(&times, cur_timestamp, forward)
+                } else {
+                    walk_bias.apply(&times, cur_timestamp, forward)
+                };
+                let weights_data = try_tensor_to_slice::<f32>(&weights)?;
+
+
+                let mut next_tmp = [(-1, -1); 1];
+                let success = reservoir_sampling_weighted(
+                    rng,
+                    neighbors_iter.zip(weights_data.iter().cloned()),
+                    &mut next_tmp
+                );
+
+                if success == 0 {
+                    // Restart random walk
+                    continue 'walk_loop;
+                }
+
+                let (next_timestamp, next) = next_tmp[0];
+                cur = next;
+                if next_timestamp != -1 {
+                    cur_timestamp = next_timestamp;
+                }
+                walks_data[i * L + l + 1] = cur;
+                walks_timestamps_data[i * L + l + 1] = next_timestamp;
+            }
+            break 'walk_loop;
+        }
+    }
+
+    Ok((walks, walks_timestamps))
+}
+
+
 #[cfg(test)]
 mod tests {
     use std::convert::{TryFrom};
     use rand::{Rng, SeedableRng};
     use tch::Tensor;
-    use crate::algo::random_walk::{random_walk, tempo_random_walk};
+    use crate::algo::random_walk::{biased_tempo_random_walk, BiasType, random_walk, tempo_random_walk};
     use crate::data::{CsrGraphStorage, CsrGraph, EdgeAttr};
     use crate::data::load_karate_graph;
     use crate::utils::tensor::try_tensor_to_slice;
@@ -247,6 +378,60 @@ mod tests {
                 }
 
                 assert!(timestamp >= head_timestamp + 0 && timestamp < head_timestamp + 2);
+            }
+        }
+    }
+
+    #[test]
+    fn test_biased_tempo_randomwalk() {
+        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
+
+        let (_x, _, coo_graph) = load_karate_graph();
+
+        let graph_data = CsrGraphStorage::try_from(&coo_graph).unwrap();
+        let graph = CsrGraph::<i64, i64>::try_from(&graph_data).unwrap();
+        let node_timestamps = (0..graph.node_count()).map(|_| rng.gen_range(-1..5) as i64).collect::<Vec<_>>();
+        let edge_timestamps = (0..graph.edge_count()).map(|_| rng.gen_range(-1..5) as i64).collect::<Vec<_>>();
+
+
+        let start = Tensor::of_slice(&[0_i64, 1, 2, 3]);
+        let start_timestamps_data = &[0_i64, -1, 2, 3];
+        let start_timestamps = Tensor::of_slice(start_timestamps_data);
+
+
+        let (walks, walk_timestamps) = biased_tempo_random_walk(
+            &mut rng,
+            &graph,
+            &node_timestamps,
+            &EdgeAttr::new(&edge_timestamps),
+            &start,
+            &start_timestamps,
+            10,
+            BiasType::Exponential,
+            true,
+            10,
+        ).unwrap();
+
+        // Check validity of the walks
+        for (i, head) in Vec::<i64>::from(start.as_ref()).into_iter().enumerate() {
+            let slice = walks.select(0, i as i64);
+            let walk = try_tensor_to_slice::<i64>(&slice).unwrap();
+            let slice_timestamps = walk_timestamps.select(0, i as i64);
+            let walk_timestamps = try_tensor_to_slice::<i64>(&slice_timestamps).unwrap();
+
+            let head_timestamp = start_timestamps_data[i];
+
+            assert_eq!(walk[0], head);
+            for (prev, curr) in walk.iter().zip(walk.iter().skip(1)) {
+                // assert!(graph.has_edge(*prev, *curr)); // TODO: there doesn't have to be and edge due to restarts
+            }
+
+            for timestamp in walk_timestamps.iter().cloned() {
+                if timestamp == -1_i64 || head_timestamp == -1_i64 {
+                    continue;
+                }
+
+                assert!(timestamp >= head_timestamp);
             }
         }
     }
