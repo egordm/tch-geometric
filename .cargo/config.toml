@@ -1,6 +1,0 @@
-[env]
-LIBTORCH = "/data/pella/projects/University/Thesis/Thesis/source/env/lib/python3.9/site-packages/torch"
-LIBTORCH_CXX11_ABI = "0"
-PYTHON_INCLUDE_DIRS = "/data/pella/projects/University/Thesis/Thesis/source/env/include/python3.9"
-LD_LIBRARY_PATH = "/data/pella/projects/University/Thesis/Thesis/source/env/lib:/data/pella/projects/University/Thesis/Thesis/source/env/lib/python3.9/site-packages/torch/lib:$LD_LIBRARY_PATH"
-
