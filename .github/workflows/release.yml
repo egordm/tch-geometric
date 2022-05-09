@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - ci
+  workflow_dispatch:
+
 
 jobs:
   wheel:
@@ -28,6 +30,13 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
+    - uses: actions-rs/toolchain@v1
+      if: ${{ matrix.os }} == 'macos-10.15'
+      with:
+        toolchain: stable
+        target: aarch64-apple-darwin
+        override: true
+
 
     - name: Install CUDA ${{ matrix.cuda-version }}
       if: ${{ matrix.cuda-version != 'cpu' }}
