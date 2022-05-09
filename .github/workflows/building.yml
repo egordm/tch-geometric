@@ -28,12 +28,6 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        profile: minimal
-        default: true
 
     - name: Install CUDA ${{ matrix.cuda-version }}
       if: ${{ matrix.cuda-version != 'cpu' }}
@@ -51,50 +45,27 @@ jobs:
         echo "LIBTORCH=$PY_SITE_DIR/torch" >> $GITHUB_ENV
         echo "LD_LIBRARY_PATH=$PY_SITE_DIR/torch/lib:$LD_LIBRARY_PATH"
         echo "LD_LIBRARY_PATH=$PY_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        pip install maturin
 
-    - uses: messense/maturin-action@v1
-      with:
-        manylinux: auto
-        command: build
-        args: --release -o dist
+    - name: Build wheel
+      run: |
+        maturin build --release -o dist
       env:
         LIBTORCH_CXX11_ABI: "0"
         LIBTORCH: ${{ env.LIBTORCH }}
         LD_LIBRARY_PATH: ${{ env.LD_LIBRARY_PATH }}
+
+#    - uses: messense/maturin-action@v1
+#      with:
+#        manylinux: auto
+#        command: build
+#        args: --release -o dist
 
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
         name: wheels
         path: dist
-
-#  windows:
-#    runs-on: windows-latest
-#    steps:
-#    - uses: actions/checkout@v2
-#    - uses: messense/maturin-action@v1
-#      with:
-#        command: build
-#        args: --release --no-sdist -o dist
-#    - name: Upload wheels
-#      uses: actions/upload-artifact@v2
-#      with:
-#        name: wheels
-#        path: dist
-#
-#  macos:
-#    runs-on: macos-latest
-#    steps:
-#    - uses: actions/checkout@v2
-#    - uses: messense/maturin-action@v1
-#      with:
-#        command: build
-#        args: --release --no-sdist -o dist --universal2
-#    - name: Upload wheels
-#      uses: actions/upload-artifact@v2
-#      with:
-#        name: wheels
-#        path: dist
 
   release:
     name: Release
