@@ -1,0 +1,36 @@
+name: Building
+
+on:
+  push:
+    branches:
+      - master
+      - ci
+
+jobs:
+  wheel:
+    runs-on: ubuntu-18.04
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: Install PyTorch ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
+        run: |
+          pip install numpy typing-extensions dataclasses
+          pip install --no-index --no-cache-dir torch==${{ matrix.torch-version}} -f https://download.pytorch.org/whl/${{ matrix.cuda-version }}/torch_stable.html
+          pip install maturin
+          python -c "import torch; print('PyTorch:', torch.__version__)"
+          python -c "import torch; print('CUDA:', torch.version.cuda)"
+          export PY_SITE_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
+          echo "LIBTORCH=$PY_SITE_DIR/torch" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$PY_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+
+      - name: Run tests
+        run: cargo test  --no-default-features
+        env:
+          LIBTORCH_CXX11_ABI: "0"
+          LIBTORCH: ${{ env.LIBTORCH }}
+          LD_LIBRARY_PATH: ${{ env.LD_LIBRARY_PATH }}

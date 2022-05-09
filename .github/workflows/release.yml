@@ -1,10 +1,10 @@
-name: CI
+name: Release
 
 on:
   push:
     branches:
-      - master
       - ci
+
 jobs:
   wheel:
     runs-on: ${{ matrix.os }}
@@ -13,8 +13,8 @@ jobs:
       matrix:
         os:
           - ubuntu-18.04
-#          - macos-10.15
-#          - windows-2019
+          - macos-10.15
+          - windows-2019
 #        python-version: ['3.7', '3.8', '3.9', '3.10']
         python-version: ['3.9']
         torch-version: [1.11.0]
@@ -38,28 +38,26 @@ jobs:
       run: |
         pip install numpy typing-extensions dataclasses
         pip install --no-index --no-cache-dir torch==${{ matrix.torch-version}} -f https://download.pytorch.org/whl/${{ matrix.cuda-version }}/torch_stable.html
+        pip install maturin
         python -c "import torch; print('PyTorch:', torch.__version__)"
         python -c "import torch; print('CUDA:', torch.version.cuda)"
         export PY_SITE_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
-        echo "LIBTORCH=$PY_SITE_DIR/torch"
         echo "LIBTORCH=$PY_SITE_DIR/torch" >> $GITHUB_ENV
-        echo "LD_LIBRARY_PATH=$PY_SITE_DIR/torch/lib:$LD_LIBRARY_PATH"
         echo "LD_LIBRARY_PATH=$PY_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-        pip install maturin
 
     - name: Build wheel
       run: |
-        maturin build --release -o dist
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          maturin build --release -o dist
+        elif [ "$RUNNER_OS" == "Windows" ]; then
+          maturin build --release --no-sdist -o dist
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          maturin build --release --no-sdist -o dist --universal2
+        fi
       env:
         LIBTORCH_CXX11_ABI: "0"
         LIBTORCH: ${{ env.LIBTORCH }}
         LD_LIBRARY_PATH: ${{ env.LD_LIBRARY_PATH }}
-
-#    - uses: messense/maturin-action@v1
-#      with:
-#        manylinux: auto
-#        command: build
-#        args: --release -o dist
 
     - name: Upload wheels
       uses: actions/upload-artifact@v2
@@ -83,5 +81,3 @@ jobs:
         with:
           command: upload
           args: --skip-existing *
-
-# act-CI-wheel
