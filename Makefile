@@ -8,3 +8,6 @@ develop:
 
 release:
 	@$(ACTIVE_ENV); $(VENV_ACTIVATE); maturin develop --release
+
+build-release:
+	@$(ACTIVE_ENV); $(VENV_ACTIVATE); maturin build --release -o dist

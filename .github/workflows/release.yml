@@ -17,9 +17,11 @@ jobs:
           - ubuntu-18.04
 #          - macos-10.15
 #          - windows-2019
-        python-version: ['3.7', '3.9', '3.10']
+#        python-version: ['3.7', '3.9', '3.10']
+        python-version: ['3.9']
         torch-version: [1.11.0]
-        cuda-version: ['cpu', 'cu102', 'cu113', 'cu115']
+#        cuda-version: ['cpu', 'cu102', 'cu113', 'cu115']
+        cuda-version: ['cu113']
 
     steps:
     - uses: actions/checkout@v2
@@ -44,7 +46,8 @@ jobs:
       run: |
         pip install numpy typing-extensions dataclasses
         pip install --no-index --no-cache-dir torch==${{ matrix.torch-version}} -f https://download.pytorch.org/whl/${{ matrix.cuda-version }}/torch_stable.html
-        pip install maturin
+        pip install maturin==0.12.9
+        pip uninstall patchelf
         python -c "import torch; print('PyTorch:', torch.__version__)"
         python -c "import torch; print('CUDA:', torch.version.cuda)"
         export PY_SITE_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
