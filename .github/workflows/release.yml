@@ -11,7 +11,7 @@ jobs:
   wheel:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os:
           - ubuntu-18.04
