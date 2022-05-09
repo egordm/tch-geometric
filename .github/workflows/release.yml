@@ -61,7 +61,7 @@ jobs:
         elif [ "$RUNNER_OS" == "Windows" ]; then
           maturin build --release --no-sdist -o dist
         elif [ "$RUNNER_OS" == "macOS" ]; then
-          maturin build --release --no-sdist -o dist --universal2
+          maturin build --release --no-sdist -o dist
         fi
       env:
         LIBTORCH_CXX11_ABI: "0"
