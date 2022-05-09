@@ -17,12 +17,9 @@ jobs:
           - ubuntu-18.04
 #          - macos-10.15
 #          - windows-2019
-#        python-version: ['3.7', '3.8', '3.9', '3.10']
-        python-version: ['3.9']
+        python-version: ['3.7', '3.8', '3.9', '3.10']
         torch-version: [1.11.0]
-#        cuda-version: ['cpu', 'cu102', 'cu113', 'cu115']
-#        cuda-version: ['cu113']
-        cuda-version: ['cpu']
+        cuda-version: ['cpu', 'cu102', 'cu113', 'cu115']
 
     steps:
     - uses: actions/checkout@v2
