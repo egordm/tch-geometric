@@ -52,23 +52,9 @@ jobs:
         echo "LIBTORCH=$PY_SITE_DIR/torch" >> $GITHUB_ENV
         echo "LD_LIBRARY_PATH=$PY_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
-    - name: Install main package for CPU
-      if: ${{ matrix.cuda-version == 'cpu' }}
-      run: |
-        FORCE_ONLY_CPU=1 pip install -e .
-      shell:
-        bash
-
-    - name: Install main package for GPU
-      if: ${{ matrix.cuda-version != 'cpu' }}
-      run: |
-        source .github/workflows/cuda/${{ matrix.cuda-version }}-${{ runner.os }}-env.sh
-        pip install -e .
-      shell:
-        bash
-
     - name: Build wheel
       run: |
+        pip install -r requirements-dev.txt
         python setup.py bdist_wheel --dist-dir=dist
       env:
         LIBTORCH_CXX11_ABI: "0"
