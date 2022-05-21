@@ -46,27 +46,35 @@ jobs:
       run: |
         pip install numpy typing-extensions dataclasses
         pip install --no-index --no-cache-dir torch==${{ matrix.torch-version}} -f https://download.pytorch.org/whl/${{ matrix.cuda-version }}/torch_stable.html
-        pip install maturin==0.12.9
-        pip uninstall patchelf
         python -c "import torch; print('PyTorch:', torch.__version__)"
         python -c "import torch; print('CUDA:', torch.version.cuda)"
         export PY_SITE_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
         echo "LIBTORCH=$PY_SITE_DIR/torch" >> $GITHUB_ENV
         echo "LD_LIBRARY_PATH=$PY_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
+    - name: Install main package for CPU
+      if: ${{ matrix.cuda-version == 'cpu' }}
+      run: |
+        FORCE_ONLY_CPU=1 pip install -e .
+      shell:
+        bash
+
+    - name: Install main package for GPU
+      if: ${{ matrix.cuda-version != 'cpu' }}
+      run: |
+        source .github/workflows/cuda/${{ matrix.cuda-version }}-${{ runner.os }}-env.sh
+        pip install -e .
+      shell:
+        bash
+
     - name: Build wheel
       run: |
-        if [ "$RUNNER_OS" == "Linux" ]; then
-          maturin build --release -o dist
-        elif [ "$RUNNER_OS" == "Windows" ]; then
-          maturin build --release --no-sdist -o dist
-        elif [ "$RUNNER_OS" == "macOS" ]; then
-          maturin build --release --no-sdist -o dist
-        fi
+        python setup.py bdist_wheel --dist-dir=dist
       env:
         LIBTORCH_CXX11_ABI: "0"
         LIBTORCH: ${{ env.LIBTORCH }}
         LD_LIBRARY_PATH: ${{ env.LD_LIBRARY_PATH }}
+        TORCH_CUDA_VERSION: ${{ matrix.cuda-version }}
 
     - name: Upload wheels
       uses: actions/upload-artifact@v2
