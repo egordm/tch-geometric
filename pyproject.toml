@@ -5,6 +5,7 @@ requires = ["setuptools>=41.0.0", "wheel", "setuptools_rust>=1.0.0"]
 
 [project]
 name = "tch-geometric"
+version = "0.1.0"
 requires-python = ">=3.6"
 classifiers = [
     "Programming Language :: Rust",
@@ -12,3 +13,6 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 
+[tool.setuptools]
+include-package-data = true
+zip-safe = false
