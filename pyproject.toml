@@ -5,8 +5,8 @@ requires = ["setuptools>=61.0.0", "wheel", "setuptools_rust>=1.0.0"]
 
 [project]
 name = "tch-geometric"
-version = "0.1.0"
 requires-python = ">=3.6"
+dynamic = ["version"]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",

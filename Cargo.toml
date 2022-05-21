@@ -24,7 +24,3 @@ criterion = "0.3"
 [features]
 extension-module = ["pyo3/extension-module", "tch/torch_python", "pyo3"]
 default = ["extension-module"]
-
-[[bench]]
-name = "internal"
-harness = false
