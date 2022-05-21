@@ -16,3 +16,6 @@ classifiers = [
 [tool.setuptools]
 include-package-data = true
 zip-safe = false
+
+[tool.maturin]
+compatibility = "manylinux2014"

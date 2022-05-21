@@ -9,7 +9,6 @@ on:
 
 jobs:
   wheel:
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
       matrix:
@@ -17,9 +16,15 @@ jobs:
           - ubuntu-18.04
 #          - macos-10.15
 #          - windows-2019
-        python-version: ['3.7', '3.9', '3.10']
+#        python-version: ['3.7', '3.9']
+        python-version: ['3.9']
         torch-version: [1.11.0]
-        cuda-version: ['cpu', 'cu102', 'cu113', 'cu115']
+#        cuda-version: ['cpu', 'cu102', 'cu113', 'cu115']
+        cuda-version: ['cpu']
+
+    runs-on: ${{ matrix.os }}
+    container:
+      image: pytorch/manylinux-cuda113
 
     steps:
     - uses: actions/checkout@v2
@@ -50,10 +55,11 @@ jobs:
         echo "LIBTORCH=$PY_SITE_DIR/torch" >> $GITHUB_ENV
         echo "LD_LIBRARY_PATH=$PY_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
-    - name: Build wheel
-      run: |
-        pip install -r requirements-dev.txt
-        python setup.py bdist_wheel --dist-dir=dist
+    - uses: messense/maturin-action@v1
+      with:
+        manylinux: auto
+        command: build
+        args: --release -o dist
       env:
         LIBTORCH_CXX11_ABI: "0"
         LIBTORCH: ${{ env.LIBTORCH }}
@@ -61,14 +67,20 @@ jobs:
         TORCH_CUDA_VERSION: ${{ matrix.cuda-version }}
         VERSION_SUFFIX: ${{ matrix.cuda-version }}
 
-    - name: Publish distribution 📦 to Test PyPI
-      uses: pypa/gh-action-pypi-publish@master
-      with:
-        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        repository_url: https://test.pypi.org/legacy/
-
-    - name: Publish distribution 📦 to PyPI
+    - name: Publish to PyPI
       if: startsWith(github.ref, 'refs/tags')
-      uses: pypa/gh-action-pypi-publish@master
+      uses: messense/maturin-action@v1
+      env:
+        MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
       with:
-        password: ${{ secrets.PYPI_API_TOKEN }}
+        command: upload
+        args: --repository-url https://test.pypi.org/legacy/ --skip-existing *
+
+    - name: Publish to PyPI
+      if: startsWith(github.ref, 'refs/tags')
+      uses: messense/maturin-action@v1
+      env:
+        MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+      with:
+        command: upload
+        args: --skip-existing *
