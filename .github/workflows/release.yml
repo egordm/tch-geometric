@@ -17,7 +17,7 @@ jobs:
 #          - macos-10.15
 #          - windows-2019
 #        python-version: ['3.7', '3.9']
-        python-version: ['cp38-cp38']
+        python-version: ['3.9']
         torch-version: [1.11.0]
 #        cuda-version: ['cpu', 'cu102', 'cu113', 'cu115']
         cuda-version: ['cpu']
@@ -47,26 +47,30 @@ jobs:
 #        bash .github/workflows/cuda/${{ matrix.cuda-version }}-${{ runner.os }}.sh
     - name: Setup Env ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
       run: |
-        export PATH=/opt/python/${{ matrix.python-version }}/bin/:$PATH
+        export PATH=/opt/python/$PYTHON_ALIAS/bin/:$PATH
         export PYTHON_INCLUDE_DIRS=$(python -c "from sysconfig import get_paths as gp; print(gp()['include'])")
         export PYTHON_SITE_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
         echo "PATH=$PATH" >> $GITHUB_ENV
         echo "PYTHON_INCLUDE_DIRS=$PYTHON_INCLUDE_DIRS" >> $GITHUB_ENV
         echo "PYTHON_SITE_DIR=$PYTHON_SITE_DIR" >> $GITHUB_ENV
+      env:
+        PYTHON_ALIAS: >-
+          ${{fromJson(
+              '{ "3.7": "cp37-cp37m", "3.8": "cp38-cp38", "3.9": "cp39-cp39", "3.10": "cp310-cp310" }'
+          )[machine_architecture]}}
 
     - name: Setup Rustup
       run: |
-        export PATH=/opt/python/${{ matrix.python-version }}/bin/:$PATH
-        export PYTHON_INCLUDE_DIRS=$(python -c "from sysconfig import get_paths as gp; print(gp()['include'])")
-        export PYTHON_SITE_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
-        echo "PATH=$PATH" >> $GITHUB_ENV
-        echo "PYTHON_INCLUDE_DIRS=$PYTHON_INCLUDE_DIRS" >> $GITHUB_ENV
-        echo "PYTHON_SITE_DIR=$PYTHON_SITE_DIR" >> $GITHUB_ENV
-        
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
     - name: Install PyTorch ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
       run: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -- -y
+        pip install numpy typing-extensions dataclasses
+        pip install --no-index --no-cache-dir torch==${{ matrix.torch-version}} -f https://download.pytorch.org/whl/${{ matrix.cuda-version }}/torch_stable.html
+        python -c "import torch; print('PyTorch:', torch.__version__)"
+        python -c "import torch; print('CUDA:', torch.version.cuda)"
+        echo "LIBTORCH=$PYTHON_SITE_DIR/torch" >> $GITHUB_ENV
+        echo "LD_LIBRARY_PATH=$PYTHON_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
     - name: Build wheel
       run: |
