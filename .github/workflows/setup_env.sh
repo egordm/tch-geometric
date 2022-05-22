@@ -1,11 +1,10 @@
 #!/bin/bash
 
-export PYTHON_ALIAS=$(
-  echo '{ "3.7": "cp37-cp37m", "3.8": "cp38-cp38", "3.9": "cp39-cp39", "3.10": "cp310-cp310" }' \
-    | jq -r 'to_entries[] | select(.key=="$") | .value'
-)
+PY_MAPPING='{ "3.7": "cp37-cp37m", "3.8": "cp38-cp38", "3.9": "cp39-cp39", "3.10": "cp310-cp310" }'
+export PYTHON_ALIAS="$(python -c "print(${PY_MAPPING}['${PYTHON_VERSION}'])")"
+
 echo Setup Python $PYTHON_VERSION - $PYTHON_ALIAS
-export PATH="/opt/python/$PYTHON_ALIAS/bin/:$PATH"
+export PATH="/opt/python/$PYTHON_ALIAS/bin:$PATH"
 export PYTHON_INCLUDE_DIRS=$(python -c "from sysconfig import get_paths as gp; print(gp()['include'])")
 export PYTHON_SITE_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
 
