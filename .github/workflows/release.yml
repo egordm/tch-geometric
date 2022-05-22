@@ -17,7 +17,7 @@ jobs:
 #          - macos-10.15
 #          - windows-2019
 #        python-version: ['3.7', '3.9']
-        python-version: ['3.9']
+        python-version: ['cp38-cp38']
         torch-version: [1.11.0]
 #        cuda-version: ['cpu', 'cu102', 'cu113', 'cu115']
         cuda-version: ['cpu']
@@ -29,10 +29,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
-      with:
-        python-version: ${{ matrix.python-version }}
+#    - name: Set up Python ${{ matrix.python-version }}
+#      uses: actions/setup-python@v2
+#      with:
+#        python-version: ${{ matrix.python-version }}
 #    - uses: actions-rs/toolchain@v1
 #      if: ${{ matrix.os }} == 'macos-10.15'
 #      with:
@@ -45,6 +45,15 @@ jobs:
 #      if: ${{ matrix.cuda-version != 'cpu' }}
 #      run: |
 #        bash .github/workflows/cuda/${{ matrix.cuda-version }}-${{ runner.os }}.sh
+    - name: Setup Env ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
+      run: |
+        export PATH=/opt/python/${{ matrix.python-version }}/bin/:$PATH
+        export PYTHON_INCLUDE_DIRS=$(python -c "from sysconfig import get_paths as gp; print(gp()['include'])")
+        export PYTHON_SITE_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
+        echo "PATH=$PATH" >> $GITHUB_ENV
+        echo "PYTHON_INCLUDE_DIRS=$PYTHON_INCLUDE_DIRS" >> $GITHUB_ENV
+        echo "PYTHON_SITE_DIR=$PYTHON_SITE_DIR" >> $GITHUB_ENV
+        
 
     - name: Install PyTorch ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
       run: |
@@ -52,15 +61,13 @@ jobs:
         pip install --no-index --no-cache-dir torch==${{ matrix.torch-version}} -f https://download.pytorch.org/whl/${{ matrix.cuda-version }}/torch_stable.html
         python -c "import torch; print('PyTorch:', torch.__version__)"
         python -c "import torch; print('CUDA:', torch.version.cuda)"
-        export PY_SITE_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
-        echo "LIBTORCH=$PY_SITE_DIR/torch" >> $GITHUB_ENV
-        echo "LD_LIBRARY_PATH=$PY_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "LIBTORCH=$PYTHON_SITE_DIR/torch" >> $GITHUB_ENV
+        echo "LD_LIBRARY_PATH=$PYTHON_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
-    - uses: messense/maturin-action@v1
-      with:
-        container: off
-        command: build
-        args: --release -o dist
+    - name: Build wheel
+      run: |
+        pip install maturin
+        maturin build --release -o dist
       env:
         LIBTORCH_CXX11_ABI: "0"
         LIBTORCH: ${{ env.LIBTORCH }}
@@ -68,22 +75,16 @@ jobs:
         TORCH_CUDA_VERSION: ${{ matrix.cuda-version }}
         VERSION_SUFFIX: ${{ matrix.cuda-version }}
 
-    - name: Publish to PyPI
-      if: startsWith(github.ref, 'refs/tags')
-      uses: messense/maturin-action@v1
+    - name: Publish to PyPI Test
+      run: |
+        maturin upload --repository-url https://test.pypi.org/legacy/ --skip-existing *
       env:
         MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
-      with:
-        container: off
-        command: upload
-        args: --repository-url https://test.pypi.org/legacy/ --skip-existing *
+
 
     - name: Publish to PyPI
       if: startsWith(github.ref, 'refs/tags')
-      uses: messense/maturin-action@v1
+      run: |
+        maturin upload --skip-existing *
       env:
-        MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-      with:
-        container: off
-        command: upload
-        args: --skip-existing *
+        MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
