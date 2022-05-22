@@ -62,7 +62,8 @@ jobs:
         python-version: [ '3.9' ]
         torch-version: [ 1.11.0 ]
         #        cuda-version: ['cpu', 'cuda102', 'cuda113', 'cuda115']
-        cuda-version: [ 'cpu' ]
+#        cuda-version: [ 'cpu' ]
+        cuda-version: [ 'cuda113' ]
 
     runs-on: ${{ matrix.os }}
 
@@ -77,9 +78,12 @@ jobs:
           extra-specs: |
             python=${{ matrix.python-version }}
             boa
+            anaconda-client
 
-      - name: Setup Env ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
-        run: bash .github/workflows/scripts/setup_conda.sh
+      - name: Build package ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
+        run: |
+          source .github/workflows/cuda/$TORCH_CUDA_VERSION-env.sh
+          ./conda/tch_geometric/build_conda.sh ${{ matrix.python-version }} ${{ matrix.torch-version }} ${{ matrix.cuda-version }}
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           TORCH_VERSION: ${{ matrix.torch-version }}
@@ -87,16 +91,8 @@ jobs:
         shell:
           bash -l {0}
 
-      - name: Build package ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
-        run: |
-          source .github/workflows/cuda/$TORCH_CUDA_VERSION-env.sh
-          ./conda/tch_geometric/build_conda.sh ${{ matrix.python-version }} ${{ matrix.torch-version }} ${{ matrix.cuda-version }}
-        shell:
-          bash -l {0}
-
       - name: Publish Conda package on personal channel
         run: |
-          conda install anaconda-client --yes
           anaconda upload --force --label main $HOME/conda-bld/*/*.tar.bz2
         env:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
