@@ -36,7 +36,7 @@ jobs:
         run: |
           pip install -r requirements-dev.txt
           python setup.py bdist_wheel --dist-dir=dist
-          python .github/workflows/auditwheel repair dist/*.whl --plat=manylinux_2_17_x86_64
+          python .github/workflows/scripts/auditwheel repair dist/*.whl --plat=manylinux_2_17_x86_64
         env:
           LIBTORCH_CXX11_ABI: "0"
 
