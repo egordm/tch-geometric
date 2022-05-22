@@ -6,7 +6,7 @@ import toml
 
 version = toml.load('Cargo.toml')['package']['version']
 if os.getenv('VERSION_SUFFIX', False):
-    version = f'{version}+{os.getenv("VERSION_SUFFIX")}'
+    version = f'{version}.{os.getenv("VERSION_SUFFIX")}'
 
 setup(
     rust_extensions=[
