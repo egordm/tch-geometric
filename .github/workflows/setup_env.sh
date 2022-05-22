@@ -1,11 +1,11 @@
 #!/bin/bash
 
-echo Setup Python
 export PYTHON_ALIAS=$(
   echo '{ "3.7": "cp37-cp37m", "3.8": "cp38-cp38", "3.9": "cp39-cp39", "3.10": "cp310-cp310" }' \
-    | jq -r 'to_entries[] | select(.key=="3.9") | .value'
+    | jq -r 'to_entries[] | select(.key=="$") | .value'
 )
-export PATH=/opt/python/$PYTHON_ALIAS/bin/:$PATH
+echo Setup Python $PYTHON_VERSION - $PYTHON_ALIAS
+export PATH="/opt/python/$PYTHON_ALIAS/bin/:$PATH"
 export PYTHON_INCLUDE_DIRS=$(python -c "from sysconfig import get_paths as gp; print(gp()['include'])")
 export PYTHON_SITE_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
 
@@ -25,3 +25,4 @@ echo "PYTHON_INCLUDE_DIRS=$PYTHON_INCLUDE_DIRS" >> $GITHUB_ENV
 echo "LIBTORCH=$PYTHON_SITE_DIR/torch" >> $GITHUB_ENV
 echo "LD_LIBRARY_PATH=$PYTHON_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 echo "TORCH_CUDA_VERSION=$TORCH_CUDA_VERSION" >> $GITHUB_ENV
+echo "PYO3_PYTHON=/opt/python/$PYTHON_ALIAS/bin/python" >> $GITHUB_ENV
