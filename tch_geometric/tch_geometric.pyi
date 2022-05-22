@@ -3,7 +3,7 @@ from typing import Union, Tuple, List, Optional, Dict
 from torch import Tensor
 from torch_geometric.typing import NodeType, EdgeType
 
-from tch_geometric.transforms import EdgeSampler, EdgeFilter
+from tch_geometric.utils import EdgeSampler, EdgeFilter
 
 LayerOffset = (int, int, int)
 RelType = str

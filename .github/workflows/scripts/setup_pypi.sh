@@ -25,7 +25,7 @@ cat .github/workflows/auditwheel > $(which auditwheel)
 echo Setting Vars
 echo "PATH=$PATH" >> $GITHUB_ENV
 echo "PYTHON_INCLUDE_DIRS=$PYTHON_INCLUDE_DIRS" >> $GITHUB_ENV
-echo "LIBTORCH=$PYTHON_SITE_DIR/torch" >> $GITHUB_ENV
-echo "LD_LIBRARY_PATH=$PYTHON_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 echo "TORCH_CUDA_VERSION=$TORCH_CUDA_VERSION" >> $GITHUB_ENV
 echo "PYO3_PYTHON=/opt/python/$PYTHON_ALIAS/bin/python" >> $GITHUB_ENV
+echo "LIBTORCH=$PYTHON_SITE_DIR/torch" >> $GITHUB_ENV
+echo "LD_LIBRARY_PATH=$PYTHON_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV

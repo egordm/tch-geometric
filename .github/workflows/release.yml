@@ -8,51 +8,95 @@ on:
 
 
 jobs:
-  wheel:
+#  pypi:
+#    strategy:
+#      fail-fast: true
+#      matrix:
+#        os:
+#          - ubuntu-18.04
+##          - macos-10.15
+##          - windows-2019
+##        python-version: ['3.7', '3.9']
+#        python-version: ['3.9']
+#        torch-version: [1.11.0]
+##        cuda-version: ['cpu', 'cuda102', 'cuda113', 'cuda115']
+#        cuda-version: ['cpu']
+#
+#    runs-on: ${{ matrix.os }}
+#    container:
+#      image: pytorch/manylinux-${{ matrix.cuda-version }}
+#
+#    steps:
+#    - uses: actions/checkout@v2
+#    - name: Setup Env ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
+#      run: bash .github/workflows/scripts/setup_pypi.sh
+#      env:
+#        PYTHON_VERSION: ${{ matrix.python-version }}
+#        TORCH_VERSION: ${{ matrix.torch-version }}
+#        CUDA_VERSION: ${{ matrix.cuda-version }}
+#
+#    - name: Build wheel
+#      run: |
+#        pip install -r requirements-dev.txt
+#        python setup.py bdist_wheel --dist-dir=dist
+#        python .github/workflows/auditwheel repair dist/*.whl --plat=manylinux_2_17_x86_64
+#      env:
+#        LIBTORCH_CXX11_ABI: "0"
+#
+#    - name: Publish to PyPI Test
+#      if: matrix.cuda-version == 'cpu'
+#      run: |
+#        maturin upload --repository-url https://test.pypi.org/legacy/ --skip-existing wheelhouse/*
+#      env:
+#        MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+#
+#    - name: Publish to PyPI
+#      if: matrix.cuda-version == 'cpu' && startsWith(github.ref, 'refs/tags')
+#      run: |
+#        maturin upload --skip-existing wheelhouse/*
+#      env:
+#        MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
+  conda:
     strategy:
       fail-fast: true
       matrix:
         os:
           - ubuntu-18.04
-#          - macos-10.15
-#          - windows-2019
-#        python-version: ['3.7', '3.9']
-        python-version: ['3.9']
-        torch-version: [1.11.0]
-#        cuda-version: ['cpu', 'cuda102', 'cuda113', 'cuda115']
-        cuda-version: ['cpu']
+        #          - macos-10.15
+        #          - windows-2019
+        #        python-version: ['3.7', '3.9']
+        python-version: [ '3.9' ]
+        torch-version: [ 1.11.0 ]
+        #        cuda-version: ['cpu', 'cuda102', 'cuda113', 'cuda115']
+        cuda-version: [ 'cpu' ]
 
     runs-on: ${{ matrix.os }}
-    container:
-      image: pytorch/manylinux-${{ matrix.cuda-version }}
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Setup Env ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
-      run: bash .github/workflows/setup_env.sh
-      env:
-        PYTHON_VERSION: ${{ matrix.python-version }}
-        TORCH_VERSION: ${{ matrix.torch-version }}
-        CUDA_VERSION: ${{ matrix.cuda-version }}
+      - uses: actions/checkout@v2
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
 
-    - name: Build wheel
-      run: |
-        pip install -r requirements-dev.txt
-        python setup.py bdist_wheel --dist-dir=dist
-        python .github/workflows/auditwheel repair dist/*.whl --plat=manylinux_2_17_x86_64
-      env:
-        LIBTORCH_CXX11_ABI: "0"
-        VERSION_SUFFIX: ${{ matrix.cuda-version }}
+      - name: Setup Env ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
+        run: bash .github/workflows/scripts/setup_conda.sh
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          TORCH_VERSION: ${{ matrix.torch-version }}
+          CUDA_VERSION: ${{ matrix.cuda-version }}
 
-    - name: Publish to PyPI Test
-      run: |
-        maturin upload --repository-url https://test.pypi.org/legacy/ --skip-existing wheelhouse/*
-      env:
-        MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+      - name: Build package
+        run: |
+          source .github/workflows/cuda/$TORCH_CUDA_VERSION-env.sh
+          ./conda/torch_geometric/build_conda.sh ${{ matrix.python-version }} ${{ matrix.torch-version }} ${{ matrix.cuda-version }}
 
-    - name: Publish to PyPI
-      if: startsWith(github.ref, 'refs/tags')
-      run: |
-        maturin upload --skip-existing wheelhouse/*
-      env:
-        MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+      - name: Publish Conda package on personal channel
+        run: |
+          conda install anaconda-client --yes
+          anaconda upload --force --label main $HOME/conda-bld/*/*.tar.bz2
+        env:
+          ANACONDA_API_TOKEN: ${{ secrets.RUSTY1S_ANACONDA_TOKEN }}
+        shell:
+          bash -l {0}
