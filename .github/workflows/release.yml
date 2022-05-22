@@ -8,49 +8,49 @@ on:
 
 
 jobs:
-  #  pypi:
-  #    strategy:
-  #      fail-fast: true
-  #      matrix:
-  #        os:
-  #          - ubuntu-18.04
-  ##        python-version: ['3.7', '3.9', '3.10']
-  #        python-version: ['3.9']
-  #        torch-version: [1.11.0]
-  #        cuda-version: ['cpu']
-  #
-  #    runs-on: ${{ matrix.os }}
-  #    container:
-  #      image: pytorch/manylinux-${{ matrix.cuda-version }}
-  #
-  #    steps:
-  #    - uses: actions/checkout@v2
-  #    - name: Setup Env ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
-  #      run: bash .github/workflows/scripts/setup_pypi.sh
-  #      env:
-  #        PYTHON_VERSION: ${{ matrix.python-version }}
-  #        TORCH_VERSION: ${{ matrix.torch-version }}
-  #        CUDA_VERSION: ${{ matrix.cuda-version }}
-  #
-  #    - name: Build wheel
-  #      run: |
-  #        pip install -r requirements-dev.txt
-  #        python setup.py bdist_wheel --dist-dir=dist
-  #        python .github/workflows/auditwheel repair dist/*.whl --plat=manylinux_2_17_x86_64
-  #      env:
-  #        LIBTORCH_CXX11_ABI: "0"
-  #
-  #    - name: Publish to PyPI Test
-  #      if: matrix.cuda-version == 'cpu'
-  #      run: maturin upload --repository-url https://test.pypi.org/legacy/ --skip-existing wheelhouse/*
-  #      env:
-  #        MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
-  #
-  #    - name: Publish to PyPI
-  #      if: matrix.cuda-version == 'cpu' && startsWith(github.ref, 'refs/tags')
-  #      run: maturin upload --skip-existing wheelhouse/*
-  #      env:
-  #        MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+    pypi:
+      strategy:
+        fail-fast: true
+        matrix:
+          os:
+            - ubuntu-18.04
+  #        python-version: ['3.7', '3.9', '3.10']
+          python-version: ['3.9']
+          torch-version: [1.11.0]
+          cuda-version: ['cpu']
+
+      runs-on: ${{ matrix.os }}
+      container:
+        image: pytorch/manylinux-${{ matrix.cuda-version }}
+
+      steps:
+      - uses: actions/checkout@v2
+      - name: Setup Env ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
+        run: bash .github/workflows/scripts/setup_pypi.sh
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          TORCH_VERSION: ${{ matrix.torch-version }}
+          CUDA_VERSION: ${{ matrix.cuda-version }}
+
+      - name: Build wheel
+        run: |
+          pip install -r requirements-dev.txt
+          python setup.py bdist_wheel --dist-dir=dist
+          python .github/workflows/auditwheel repair dist/*.whl --plat=manylinux_2_17_x86_64
+        env:
+          LIBTORCH_CXX11_ABI: "0"
+
+      - name: Publish to PyPI Test
+        if: matrix.cuda-version == 'cpu'
+        run: maturin upload --repository-url https://test.pypi.org/legacy/ --skip-existing wheelhouse/*
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
+      - name: Publish to PyPI
+        if: matrix.cuda-version == 'cpu' && startsWith(github.ref, 'refs/tags')
+        run: maturin upload --skip-existing wheelhouse/*
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
 
   conda:
     strategy:
