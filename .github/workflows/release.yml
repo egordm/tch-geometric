@@ -24,8 +24,7 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     container:
-#      image: pytorch/manylinux-cuda113
-      image: pytorch/manylinux-cpu
+      image: pytorch/manylinux-${{ matrix.cuda-version }}
 
     steps:
     - uses: actions/checkout@v2
