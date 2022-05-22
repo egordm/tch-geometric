@@ -1,7 +1,8 @@
 #!/bin/bash
 
 echo Install Conda Build
-conda install conda-build conda-verify --yes
+#micromamba install conda-build conda-verify --yes
+#micromamba install boa -c conda-forge
 
 echo Setup Cuda Args
 export TORCH_CUDA_VERSION=$(echo $CUDA_VERSION | sed "s/cuda/cu/g")
