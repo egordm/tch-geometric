@@ -8,22 +8,22 @@ on:
 
 
 jobs:
-    pypi:
-      strategy:
-        fail-fast: true
-        matrix:
-          os:
-            - ubuntu-18.04
-  #        python-version: ['3.7', '3.9', '3.10']
-          python-version: ['3.9']
-          torch-version: [1.11.0]
-          cuda-version: ['cpu']
+  pypi:
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+          - ubuntu-18.04
+        #        python-version: ['3.7', '3.9', '3.10']
+        python-version: [ '3.9' ]
+        torch-version: [ 1.11.0 ]
+        cuda-version: [ 'cpu' ]
 
-      runs-on: ${{ matrix.os }}
-      container:
-        image: pytorch/manylinux-${{ matrix.cuda-version }}
+    runs-on: ${{ matrix.os }}
+    container:
+      image: pytorch/manylinux-${{ matrix.cuda-version }}
 
-      steps:
+    steps:
       - uses: actions/checkout@v2
       - name: Setup Env ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
         run: bash .github/workflows/scripts/setup_pypi.sh
@@ -62,11 +62,10 @@ jobs:
         python-version: [ '3.9' ]
         torch-version: [ 1.11.0 ]
         #        cuda-version: ['cpu', 'cu102', 'cu113', 'cu115']
-#        cuda-version: [ 'cpu' ]
+        #        cuda-version: [ 'cpu' ]
         cuda-version: [ 'cu113' ]
 
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@v2
       - name: Install Conda environment with Micromamba
