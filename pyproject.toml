@@ -1,13 +1,19 @@
 [build-system]
-requires = ["maturin>=0.12,<0.13"]
-build-backend = "maturin"
+requires = ["setuptools>=61.0.0", "wheel", "setuptools_rust>=1.0.0"]
+#requires = ["maturin>=0.12,<0.13"]
+#build-backend = "maturin"
 
 [project]
 name = "tch-geometric"
 requires-python = ">=3.6"
+dynamic = ["version"]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 
+[tool.setuptools]
+packages = ["tch_geometric"]
+include-package-data = true
+zip-safe = false
