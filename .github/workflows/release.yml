@@ -87,10 +87,10 @@ jobs:
           TORCH_VERSION: ${{ matrix.torch-version }}
           CUDA_VERSION: ${{ matrix.cuda-version }}
 
-      - name: Build package
+      - name: Build package ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
         run: |
           source .github/workflows/cuda/$TORCH_CUDA_VERSION-env.sh
-          ./conda/torch_geometric/build_conda.sh ${{ matrix.python-version }} ${{ matrix.torch-version }} ${{ matrix.cuda-version }}
+          ./conda/tch_geometric/build_conda.sh ${{ matrix.python-version }} ${{ matrix.torch-version }} ${{ matrix.cuda-version }}
 
       - name: Publish Conda package on personal channel
         run: |
