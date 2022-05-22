@@ -3,8 +3,17 @@
 <div align="center">
     <h1>tch-geometric</h1>
     <p>
-       <a href="LICENSE"><img src="https://img.shields.io/github/license/EgorDm/nauman" alt="License"></a>
- <a href="https://github.com/EgorDm/tch-geometric/actions/workflows/ci.yml"><img src="https://github.com/EgorDm/tch-geometric/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+        <a href="LICENSE">
+            <img src="https://img.shields.io/github/license/EgorDm/tch-geometric" alt="License"></a>
+        <a href="https://github.com/EgorDm/tch-geometric/actions/workflows/ci.yml">
+             <img src="https://github.com/EgorDm/tch-geometric/actions/workflows/release.yml/badge.svg" alt="CI">
+        </a>
+        <a href="https://badge.fury.io/py/tch-geometric">
+            <img src="https://badge.fury.io/py/tch-geometric.svg" alt="PyPI version">
+        </a>
+        <a href="https://anaconda.org/egordm/tch_geometric">
+         <img src="https://anaconda.org/egordm/tch_geometric/badges/version.svg">
+        </a>
     </p>
     <p>
         <b>Pytorch Geometric extension library</b>
