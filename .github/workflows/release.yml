@@ -19,7 +19,7 @@ jobs:
 #        python-version: ['3.7', '3.9']
         python-version: ['3.9']
         torch-version: [1.11.0]
-#        cuda-version: ['cpu', 'cu102', 'cu113', 'cu115']
+#        cuda-version: ['cpu', 'cuda102', 'cuda113', 'cuda115']
         cuda-version: ['cpu']
 
     runs-on: ${{ matrix.os }}
@@ -30,39 +30,18 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Setup Env ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
-      run: |
-        bash .github/workflows/setup_env.sh
+      run: bash .github/workflows/setup_env.sh
       env:
         TORCH_VERSION: ${{ matrix.torch-version }}
         CUDA_VERSION: ${{ matrix.cuda-version }}
-        PYTHON_ALIAS: >-
-          ${{fromJson(
-              '{ "3.7": "cp37-cp37m", "3.8": "cp38-cp38", "3.9": "cp39-cp39", "3.10": "cp310-cp310" }'
-          )[matrix.python-version]}}
-
-#    - name: Setup Rustup
-#      run: |
-#        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-#        echo "PATH=$HOME/.cargo/bin:$PATH" >> $GITHUB_ENV
-#
-#    - name: Install PyTorch ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
-#      run: |
-#        pip install numpy typing-extensions dataclasses
-#        pip install --no-index --no-cache-dir torch==${{ matrix.torch-version}} -f https://download.pytorch.org/whl/${{ matrix.cuda-version }}/torch_stable.html
-#        python -c "import torch; print('PyTorch:', torch.__version__)"
-#        python -c "import torch; print('CUDA:', torch.version.cuda)"
-#        echo "LIBTORCH=$PYTHON_SITE_DIR/torch" >> $GITHUB_ENV
-#        echo "LD_LIBRARY_PATH=$PYTHON_SITE_DIR/torch/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
     - name: Build wheel
       run: |
         pip install maturin
         maturin build --release -o dist
+        ls -la dist
       env:
         LIBTORCH_CXX11_ABI: "0"
-        LIBTORCH: ${{ env.LIBTORCH }}
-        LD_LIBRARY_PATH: ${{ env.LD_LIBRARY_PATH }}
-        TORCH_CUDA_VERSION: ${{ matrix.cuda-version }}
         VERSION_SUFFIX: ${{ matrix.cuda-version }}
 
     - name: Publish to PyPI Test
