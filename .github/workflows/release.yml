@@ -57,7 +57,7 @@ jobs:
 
     - uses: messense/maturin-action@v1
       with:
-        manylinux: auto
+        container: off
         command: build
         args: --release -o dist
       env:
@@ -73,6 +73,7 @@ jobs:
       env:
         MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
       with:
+        container: off
         command: upload
         args: --repository-url https://test.pypi.org/legacy/ --skip-existing *
 
@@ -82,5 +83,6 @@ jobs:
       env:
         MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
       with:
+        container: off
         command: upload
         args: --skip-existing *
