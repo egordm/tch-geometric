@@ -61,9 +61,9 @@ jobs:
         #        python-version: ['3.7', '3.9', '3.10']
         python-version: [ '3.9' ]
         torch-version: [ 1.11.0 ]
-        #        cuda-version: ['cpu', 'cuda102', 'cuda113', 'cuda115']
+        #        cuda-version: ['cpu', 'cu102', 'cu113', 'cu115']
 #        cuda-version: [ 'cpu' ]
-        cuda-version: [ 'cuda113' ]
+        cuda-version: [ 'cu113' ]
 
     runs-on: ${{ matrix.os }}
 
@@ -82,7 +82,7 @@ jobs:
 
       - name: Build package ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
         run: |
-          source .github/workflows/cuda/$TORCH_CUDA_VERSION-env.sh
+          source .github/workflows/cuda/$CUDA_VERSION-env.sh
           ./conda/tch_geometric/build_conda.sh ${{ matrix.python-version }} ${{ matrix.torch-version }} ${{ matrix.cuda-version }}
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
