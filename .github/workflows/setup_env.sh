@@ -14,11 +14,15 @@ export PATH=$HOME/.cargo/bin:$PATH
 
 echo Install PyTorch $TORCH_VERSION+$CUDA_VERSION
 export TORCH_CUDA_VERSION=$(echo $CUDA_VERSION | sed "s/cuda/cu/g")
-pip install numpy typing-extensions dataclasses
+pip install numpy typing-extensions dataclasses toml auditwheel
 pip install --no-index --no-cache-dir torch==$TORCH_VERSION -f https://download.pytorch.org/whl/$CUDA_VERSION/torch_stable.html
 python -c "import torch; print('PyTorch:', torch.__version__)"
 python -c "import torch; print('CUDA:', torch.version.cuda)"
 
+echo Updating auditwheel
+cat .github/workflows/auditwheel > $(which auditwheel)
+
+echo Setting Vars
 echo "PATH=$PATH" >> $GITHUB_ENV
 echo "PYTHON_INCLUDE_DIRS=$PYTHON_INCLUDE_DIRS" >> $GITHUB_ENV
 echo "LIBTORCH=$PYTHON_SITE_DIR/torch" >> $GITHUB_ENV

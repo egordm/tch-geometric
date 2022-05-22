@@ -1,0 +1,22 @@
+#!/bin/python
+# -*- coding: utf-8 -*-
+
+# Monkey patch to not ship libjvm.so in pypi wheels
+import sys
+import re
+
+from auditwheel.main import main
+from auditwheel.policy import _POLICIES as POLICIES
+
+# libjvm is loaded dynamically; do not include it
+for p in POLICIES:
+    p['lib_whitelist'].append('libtorch_cuda_cu.so')
+    p['lib_whitelist'].append('libtorch_cuda_cpp.so')
+    p['lib_whitelist'].append('libtorch_cpu.so')
+    p['lib_whitelist'].append('libtorch_python.so')
+    p['lib_whitelist'].append('libtorch.so')
+    p['lib_whitelist'].append('libtorch_cuda.so')
+
+if __name__ == "__main__":
+    sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])
+    sys.exit(main())

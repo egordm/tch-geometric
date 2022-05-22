@@ -14,8 +14,6 @@ classifiers = [
 ]
 
 [tool.setuptools]
+packages = ["tch_geometric"]
 include-package-data = true
 zip-safe = false
-
-[tool.maturin]
-compatibility = "manylinux2014"
