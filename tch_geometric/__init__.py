@@ -1,3 +1,3 @@
-import tch_geometric.tch_geometric as native
+from tch_geometric.tch_geometric import *
 
 

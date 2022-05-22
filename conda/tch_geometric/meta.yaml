@@ -38,8 +38,11 @@ build:
     - TORCH_CUDA_VERSION
 
 test:
-  imports:
-    - tch_geometric
+  commands:
+    - |
+      export PYTHON_SITE_DIR=$(python -c "import site; print(site.getsitepackages()[0])")
+      export LD_LIBRARY_PATH="$PYTHON_SITE_DIR/torch/lib:$LD_LIBRARY_PATH"
+      python -c "import tch_geometric"
 
 about:
   home: https://github.com/EgorDm/tch-geometric
