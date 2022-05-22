@@ -71,6 +71,7 @@ jobs:
       - name: Install Conda environment with Micromamba
         uses: mamba-org/provision-with-micromamba@main
         with:
+          environment-name: ${{ matrix.torch-version }}+${{ matrix.cuda-version }}
           environment-file: false
           extra-specs: |
             python=${{ matrix.python-version }}
